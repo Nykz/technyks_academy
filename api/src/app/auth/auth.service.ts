@@ -67,7 +67,21 @@ export class AuthService implements OnModuleInit {
         const existing = await this.prisma.user.findUnique({
           where: { email: adminEmail },
         });
-        if (!existing) {
+        if (existing) {
+          const adminUpdate: { role?: 'ADMIN'; passwordHash?: string } = {};
+          if (existing.role !== 'ADMIN') adminUpdate.role = 'ADMIN';
+          if (!existing.passwordHash) adminUpdate.passwordHash = passwordHash;
+
+          if (Object.keys(adminUpdate).length > 0) {
+            await this.prisma.user.update({
+              where: { id: existing.id },
+              data: adminUpdate,
+            });
+            this.logger.log(
+              `Configured administrator access for ${adminEmail}.`,
+            );
+          }
+        } else {
           await this.prisma.user.create({ data: adminUser as any });
         }
       } catch (error: any) {
@@ -81,7 +95,10 @@ export class AuthService implements OnModuleInit {
     const inMemExisting = this.prisma.inMemoryUsers.find(
       (u) => u.email === adminEmail,
     );
-    if (!inMemExisting) {
+    if (inMemExisting) {
+      inMemExisting.role = 'ADMIN';
+      inMemExisting.passwordHash ||= passwordHash;
+    } else {
       this.prisma.inMemoryUsers.push(adminUser);
     }
   }
