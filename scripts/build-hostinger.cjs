@@ -1,5 +1,6 @@
 const { spawnSync } = require('node:child_process');
 const {
+  cpSync,
   copyFileSync,
   chmodSync,
   existsSync,
@@ -7,6 +8,7 @@ const {
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmSync,
 } = require('node:fs');
 const { join } = require('node:path');
 
@@ -14,7 +16,14 @@ const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const isApiBuild = process.env.HOSTINGER_API_BUILD === 'true';
 
 function runNpm(args, options = {}) {
-  const result = spawnSync(npmCommand, args, {
+  const lifecyclePackageManager = process.env.npm_execpath;
+  const useLifecyclePackageManager =
+    lifecyclePackageManager && existsSync(lifecyclePackageManager);
+  const command = useLifecyclePackageManager ? process.execPath : npmCommand;
+  const commandArgs = useLifecyclePackageManager
+    ? [lifecyclePackageManager, ...args]
+    : args;
+  const result = spawnSync(command, commandArgs, {
     stdio: 'inherit',
     shell: process.platform === 'win32',
   });
@@ -34,7 +43,9 @@ function runNpm(args, options = {}) {
 }
 
 function hasLocalNx() {
-  return existsSync(join(process.cwd(), 'node_modules', 'nx', 'dist', 'bin', 'nx.js'));
+  return existsSync(
+    join(process.cwd(), 'node_modules', 'nx', 'dist', 'bin', 'nx.js'),
+  );
 }
 
 function requireMySqlDatabaseUrl() {
@@ -47,9 +58,7 @@ function requireMySqlDatabaseUrl() {
   }
 
   if (!/^mysql:\/\//i.test(databaseUrl)) {
-    console.warn(
-      '⚠️ [Build] DATABASE_URL does not use mysql:// protocol.',
-    );
+    console.warn('⚠️ [Build] DATABASE_URL does not use mysql:// protocol.');
   }
   return true;
 }
@@ -57,12 +66,7 @@ function requireMySqlDatabaseUrl() {
 function ensurePrismaEngineExecutable() {
   if (process.platform === 'win32') return;
 
-  const enginesDir = join(
-    process.cwd(),
-    'node_modules',
-    '@prisma',
-    'engines',
-  );
+  const enginesDir = join(process.cwd(), 'node_modules', '@prisma', 'engines');
   if (!existsSync(enginesDir)) return;
 
   for (const fileName of readdirSync(enginesDir)) {
@@ -76,7 +80,9 @@ function ensurePrismaEngineExecutable() {
 // Nx is a build-time dependency, so restore the repository's dev dependencies
 // when the build environment does not contain the local Nx executable.
 if (!hasLocalNx()) {
-  console.log('Nx is not installed; installing the repository build dependencies...');
+  console.log(
+    'Nx is not installed; installing the repository build dependencies...',
+  );
   runNpm([
     'install',
     '--include=dev',
@@ -104,6 +110,8 @@ if (isApiBuild) {
   const distApiDir = join(process.cwd(), 'dist', 'api');
   const nestedDistDir = join(process.cwd(), 'dist', 'dist', 'api');
   const nestedDistApiDir = join(process.cwd(), 'dist', 'api', 'dist', 'api');
+  const sourceWebDir = join(process.cwd(), 'public_dist');
+  const runtimeWebDir = join(distDir, 'public');
 
   if (!existsSync(distApiDir)) {
     mkdirSync(distApiDir, { recursive: true });
@@ -114,6 +122,15 @@ if (isApiBuild) {
   if (!existsSync(nestedDistDir)) {
     mkdirSync(nestedDistDir, { recursive: true });
   }
+
+  if (!existsSync(join(sourceWebDir, 'index.html'))) {
+    console.error(
+      '❌ The committed web build was not found in public_dist. Cannot create the combined Hostinger deployment.',
+    );
+    process.exit(1);
+  }
+  rmSync(runtimeWebDir, { recursive: true, force: true });
+  cpSync(sourceWebDir, runtimeWebDir, { recursive: true });
 
   // Hostinger promotes only the configured output directory. Make dist/api a
   // complete Node application rather than a directory containing only a
@@ -182,10 +199,22 @@ if (isApiBuild) {
   createRuntimePackage(distApiDir, 'main.js');
 
   // Root wrappers
-  writeFileSync(join(process.cwd(), 'main.js'), 'require("./dist/api/main.js");\n');
-  writeFileSync(join(process.cwd(), 'server.js'), 'require("./dist/api/main.js");\n');
-  writeFileSync(join(process.cwd(), 'index.js'), 'require("./dist/api/main.js");\n');
-  writeFileSync(join(process.cwd(), 'app.js'), 'require("./dist/api/main.js");\n');
+  writeFileSync(
+    join(process.cwd(), 'main.js'),
+    "require('./dist/api/main.js');\n",
+  );
+  writeFileSync(
+    join(process.cwd(), 'server.js'),
+    "require('./dist/api/main.js');\n",
+  );
+  writeFileSync(
+    join(process.cwd(), 'index.js'),
+    "require('./dist/api/main.js');\n",
+  );
+  writeFileSync(
+    join(process.cwd(), 'app.js'),
+    "require('./dist/api/main.js');\n",
+  );
 
   // dist wrappers
   writeFileSync(join(distDir, 'main.js'), 'require("./api/main.js");\n');
@@ -194,9 +223,18 @@ if (isApiBuild) {
   writeFileSync(join(distDir, 'app.js'), 'require("./api/main.js");\n');
 
   // dist/dist/api wrappers (when output_dir=dist and entry=dist/api/main.js)
-  writeFileSync(join(nestedDistDir, 'main.js'), 'require("../../api/main.js");\n');
-  writeFileSync(join(nestedDistDir, 'server.js'), 'require("../../api/main.js");\n');
-  writeFileSync(join(nestedDistDir, 'index.js'), 'require("../../api/main.js");\n');
+  writeFileSync(
+    join(nestedDistDir, 'main.js'),
+    'require("../../api/main.js");\n',
+  );
+  writeFileSync(
+    join(nestedDistDir, 'server.js'),
+    'require("../../api/main.js");\n',
+  );
+  writeFileSync(
+    join(nestedDistDir, 'index.js'),
+    'require("../../api/main.js");\n',
+  );
 
   // dist/api wrappers
   writeFileSync(join(distApiDir, 'server.js'), 'require("./main.js");\n');
@@ -204,12 +242,21 @@ if (isApiBuild) {
   writeFileSync(join(distApiDir, 'app.js'), 'require("./main.js");\n');
 
   // Nested dist/api/dist/api wrappers (in case Hostinger searches output_dir/entry_file)
-  writeFileSync(join(nestedDistApiDir, 'main.js'), 'require("../../main.js");\n');
-  writeFileSync(join(nestedDistApiDir, 'server.js'), 'require("../../main.js");\n');
-  writeFileSync(join(nestedDistApiDir, 'index.js'), 'require("../../main.js");\n');
+  writeFileSync(
+    join(nestedDistApiDir, 'main.js'),
+    'require("../../main.js");\n',
+  );
+  writeFileSync(
+    join(nestedDistApiDir, 'server.js'),
+    'require("../../main.js");\n',
+  );
+  writeFileSync(
+    join(nestedDistApiDir, 'index.js'),
+    'require("../../main.js");\n',
+  );
 
   console.log(
-    '✅ Hostinger API artifact created with runtime package, Prisma schema, and entry point wrappers.',
+    '✅ Combined Hostinger artifact created with the website, API, runtime package, Prisma schema, and entry point wrappers.',
   );
 } else {
   // The existing frontend deployment continues to use the normal Angular

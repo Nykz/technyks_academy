@@ -1,11 +1,35 @@
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { json, urlencoded } from 'express';
-import { mkdirSync } from 'node:fs';
+import {
+  json,
+  urlencoded,
+  type NextFunction,
+  type Request,
+  type Response,
+} from 'express';
+import { existsSync, mkdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import { join, resolve } from 'node:path';
 import { AppModule } from './app/app.module';
 import { getUploadsDirectory } from './app/admin/media.service';
+
+function getWebDirectory() {
+  const configuredDirectory = String(process.env.WEB_DIST_DIR || '').trim();
+  const candidates = [
+    configuredDirectory ? resolve(configuredDirectory) : '',
+    resolve(process.cwd(), 'public'),
+    resolve(process.cwd(), 'dist', 'public'),
+    resolve(process.cwd(), 'public_dist'),
+    resolve(__dirname, 'public'),
+    resolve(__dirname, '..', 'public'),
+    resolve(__dirname, '..', '..', 'public'),
+  ].filter(Boolean);
+
+  return candidates.find((directory) =>
+    existsSync(join(directory, 'index.html')),
+  );
+}
 
 function validateProductionEnvironment() {
   const databaseUrl = String(process.env.DATABASE_URL || '').trim();
@@ -52,6 +76,47 @@ async function bootstrap() {
     prefix: '/uploads/',
     index: false,
   });
+
+  const webDirectory = getWebDirectory();
+  if (webDirectory) {
+    app.useStaticAssets(webDirectory, {
+      index: false,
+      fallthrough: true,
+    });
+
+    const expressApp = app.getHttpAdapter().getInstance();
+    expressApp.get(
+      /.*/,
+      (request: Request, response: Response, next: NextFunction) => {
+        const requestPath = request.path;
+        const isBackendRoute =
+          requestPath === '/api' ||
+          requestPath.startsWith('/api/') ||
+          requestPath === '/health' ||
+          requestPath.startsWith('/uploads/');
+        const looksLikeMissingFile = requestPath
+          .split('/')
+          .pop()
+          ?.includes('.');
+
+        if (isBackendRoute || looksLikeMissingFile) {
+          next();
+          return;
+        }
+
+        response.sendFile(join(webDirectory, 'index.html'));
+      },
+    );
+    Logger.log(
+      `[Startup] Serving the Technyks web application from ${webDirectory}`,
+      'Bootstrap',
+    );
+  } else {
+    Logger.warn(
+      '[Startup] Web build was not found. The API will start without the website shell.',
+      'Bootstrap',
+    );
+  }
   app.use(json({ limit: '16mb' }));
   app.use(urlencoded({ extended: true, limit: '16mb' }));
   app.enableCors({
@@ -77,10 +142,7 @@ async function bootstrap() {
   } else {
     // Unix domain socket or named pipe provided by host
     await app.listen(rawPort);
-    Logger.log(
-      `🚀 Backend API is running on socket: ${rawPort}`,
-      'Bootstrap',
-    );
+    Logger.log(`🚀 Backend API is running on socket: ${rawPort}`, 'Bootstrap');
   }
 }
 
