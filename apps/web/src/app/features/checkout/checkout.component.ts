@@ -43,7 +43,7 @@ import { CoursesService } from '../../core/services/courses.service';
                 type="text"
                 [(ngModel)]="couponCode"
                 placeholder="Enter code (e.g. TECHNYKS50)"
-                class="flex-grow bg-[#040810] border border-[#1E293B] focus:border-[#3B82F6] focus:outline-none rounded px-4 py-2.5 text-xs text-white font-['JetBrains_Mono'] uppercase"
+                class="flex-grow rounded border border-slate-300 bg-white px-4 py-2.5 font-['JetBrains_Mono'] text-xs uppercase text-slate-900 caret-slate-900 placeholder:text-slate-400 focus:border-[#2563EB] focus:outline-none dark:border-[#1E293B] dark:bg-[#040810] dark:text-white dark:caret-white dark:placeholder:text-slate-500 dark:focus:border-[#3B82F6]"
               />
               <button
                 (click)="applyCoupon()"
