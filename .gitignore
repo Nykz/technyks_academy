@@ -4,6 +4,8 @@
 dist
 tmp
 out-tsc
+/public_dist/
+*.zip
 
 # dependencies
 node_modules
@@ -52,4 +54,12 @@ Thumbs.db
 
 .angular
 
+# Local Google Drive course folders used by the Bunny bulk importer.
+/course-imports/
+
 __screenshots__/
+
+# Runtime-uploaded and private business content — never belongs in the repo.
+/uploads/
+/private_uploads/
+/artifacts/

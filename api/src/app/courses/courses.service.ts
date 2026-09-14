@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JAVASCRIPT_COURSE } from './javascript-course.data';
 import { TYPESCRIPT_COURSE } from './typescript-course.data';
@@ -296,10 +301,10 @@ export class CoursesService implements OnModuleInit {
           orderBy: { createdAt: 'desc' },
         });
         return courses.map((course) => this.toPublicCourse(course));
-      } catch (e) {
-        return this.prisma.inMemoryCourses
-          .filter((course) => course.isPublished && !course.isArchived)
-          .map((course) => this.toPublicCourse(course));
+      } catch {
+        throw new ServiceUnavailableException(
+          'Courses could not be loaded. Please retry shortly.',
+        );
       }
     }
     return this.prisma.inMemoryCourses
@@ -307,11 +312,11 @@ export class CoursesService implements OnModuleInit {
       .map((course) => this.toPublicCourse(course));
   }
 
-  async findBySlug(slug: string) {
+  async findBySlug(slug: string, byId = false) {
     if (this.prisma.isDbConnected) {
       try {
         const course = await this.prisma.course.findFirst({
-          where: { slug, isPublished: true, isArchived: false },
+          where: { ...(byId ? { id: slug } : { slug }), isPublished: true, isArchived: false },
           include: {
             modules: {
               include: {
@@ -338,12 +343,14 @@ export class CoursesService implements OnModuleInit {
         throw new NotFoundException(`Course with slug "${slug}" not found.`);
       } catch (e) {
         if (e instanceof NotFoundException) throw e;
-        // Fallback to in-memory
+        throw new ServiceUnavailableException(
+          'This course could not be loaded. Please retry shortly.',
+        );
       }
     }
 
     const found = this.prisma.inMemoryCourses.find(
-      (c) => c.slug === slug && c.isPublished && !c.isArchived,
+      (c) => (byId ? c.id === slug : c.slug === slug) && c.isPublished && !c.isArchived,
     );
     if (!found) {
       throw new NotFoundException(`Course with slug "${slug}" not found.`);

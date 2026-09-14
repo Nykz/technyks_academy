@@ -40,6 +40,27 @@ export const appRoutes: Routes = [
       ),
   },
   {
+    path: 'templates',
+    loadComponent: () =>
+      import('./features/templates/templates-store.component').then(
+        (m) => m.TemplatesStoreComponent,
+      ),
+  },
+  {
+    path: 'templates/:slug',
+    loadComponent: () =>
+      import('./features/templates/template-detail.component').then(
+        (m) => m.TemplateDetailComponent,
+      ),
+  },
+  {
+    path: 'cart',
+    loadComponent: () =>
+      import('./features/templates/template-cart.component').then(
+        (m) => m.TemplateCartComponent,
+      ),
+  },
+  {
     path: 'contact',
     loadComponent: () =>
       import('./features/contact/contact.component').then(
@@ -87,6 +108,14 @@ export const appRoutes: Routes = [
       ),
   },
   {
+    path: 'admin/templates/:id/manage',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/admin-template-editor.component').then(
+        (m) => m.AdminTemplateEditorComponent,
+      ),
+  },
+  {
     path: 'auth/login',
     loadComponent: () =>
       import('./features/auth/login.component').then((m) => m.LoginComponent),
@@ -101,6 +130,13 @@ export const appRoutes: Routes = [
     loadComponent: () =>
       import('./features/auth/forgot-password.component').then(
         (m) => m.ForgotPasswordComponent,
+      ),
+  },
+  {
+    path: 'auth/reset-password',
+    loadComponent: () =>
+      import('./features/auth/reset-password.component').then(
+        (m) => m.ResetPasswordComponent,
       ),
   },
   {

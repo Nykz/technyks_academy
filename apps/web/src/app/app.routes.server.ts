@@ -30,7 +30,23 @@ export const serverRoutes: ServerRoute[] = [
     renderMode: RenderMode.Client,
   },
   {
+    path: 'admin/templates/:id/manage',
+    renderMode: RenderMode.Client,
+  },
+  {
     path: 'checkout',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'templates',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'templates/:slug',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'cart',
     renderMode: RenderMode.Client,
   },
   {

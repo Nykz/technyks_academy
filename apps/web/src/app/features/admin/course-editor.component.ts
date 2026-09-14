@@ -14,11 +14,12 @@ import {
   Coupon,
   CourseStudent,
 } from '../../core/services/admin.service';
+import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 
 @Component({
   selector: 'app-course-editor',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, MediaUrlPipe],
   template: `
     <div class="admin-shell min-h-screen bg-[#040810] text-[#e0e3e5] flex flex-col overflow-x-hidden">
       <!-- Top Header Navigation & Status Bar -->
@@ -45,7 +46,7 @@ import {
 
         <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-3">
           @if (saveMessage()) {
-            <span class="col-span-2 sm:order-first flex items-center gap-1.5 font-['JetBrains_Mono'] text-[11px] sm:text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-500/50 px-3.5 py-1.5 rounded-lg shadow-sm animate-in fade-in duration-200">
+            <span class="save-badge-in col-span-2 sm:order-first flex items-center gap-1.5 font-['JetBrains_Mono'] text-[11px] sm:text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-500/50 px-3.5 py-1.5 rounded-lg shadow-sm">
               <span class="material-symbols-outlined text-sm">check_circle</span>
               {{ saveMessage() }}
             </span>
@@ -383,7 +384,7 @@ import {
                 <div class="flex items-center justify-between mb-4"><div><h3 class="font-['Hanken_Grotesk'] text-base font-bold text-white">Course image</h3><p class="font-['Inter'] text-xs text-[#a18d7b] mt-1">Shown in search results and behind the preview play button.</p></div>@if (course()?.thumbnail) {<button type="button" (click)="removeMedia('thumbnail')" [disabled]="removingMedia() === 'thumbnail'" class="font-['JetBrains_Mono'] text-[11px] text-[#ffb4ab] border border-[#ffb4ab]/40 rounded px-3 py-2 hover:bg-[#ffb4ab]/10 disabled:opacity-50">{{ removingMedia() === 'thumbnail' ? 'Removing…' : 'Remove image' }}</button>}</div>
                 <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)] gap-6 items-stretch">
                   <div class="relative aspect-[16/9] bg-[#040810] border border-[#1E293B] rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
-                    @if (course()?.thumbnail) {<img [src]="course()?.thumbnail" [alt]="course()?.title" class="w-full h-full object-cover" />} @else {<div class="text-center text-[#a18d7b]"><span class="material-symbols-outlined text-5xl">image</span><p class="text-xs mt-2">No course image</p></div>}
+                    @if (course()?.thumbnail) {<img [src]="course()?.thumbnail | mediaUrl" [alt]="course()?.title" class="w-full h-full object-cover" />} @else {<div class="text-center text-[#a18d7b]"><span class="material-symbols-outlined text-5xl">image</span><p class="text-xs mt-2">No course image</p></div>}
                     @if (isUploadingImage()) {<div class="absolute inset-0 bg-[#040810]/85 backdrop-blur-sm grid place-items-center"><div class="text-center"><span class="material-symbols-outlined text-3xl text-[#3B82F6] animate-spin">progress_activity</span><p class="font-['JetBrains_Mono'] text-[11px] text-white mt-2">Uploading image…</p></div></div>}
                   </div>
                   <div class="rounded-xl border border-[#1E293B] bg-[#040810]/45 p-5 flex flex-col justify-between gap-4">
@@ -398,7 +399,7 @@ import {
                 <div class="flex items-center justify-between mb-4"><div><h3 class="font-['Hanken_Grotesk'] text-base font-bold text-white">Promotional video</h3><p class="font-['Inter'] text-xs text-[#a18d7b] mt-1">This plays directly inside the landing-page preview card.</p></div>@if (course()?.promoVideoUrl) {<button type="button" (click)="removeMedia('promoVideoUrl')" [disabled]="removingMedia() === 'promoVideoUrl'" class="font-['JetBrains_Mono'] text-[11px] text-[#ffb4ab] border border-[#ffb4ab]/40 rounded px-3 py-2 hover:bg-[#ffb4ab]/10 disabled:opacity-50">{{ removingMedia() === 'promoVideoUrl' ? 'Removing…' : 'Remove video' }}</button>}</div>
                 <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)] gap-6 items-stretch">
                   <div class="relative aspect-video bg-black border border-[#1E293B] rounded-xl overflow-hidden grid place-items-center">
-                    @if (isDirectPromoVideo(course()?.promoVideoUrl)) {<video [src]="course()?.promoVideoUrl" controls class="w-full h-full object-contain"></video>} @else if (promoEmbedUrl()) {<iframe [src]="promoEmbedUrl()" title="Course promotional video preview" class="w-full h-full border-0" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>} @else {<div class="text-center text-[#a18d7b]"><span class="material-symbols-outlined text-5xl">smart_display</span><p class="text-xs mt-2">No promotional video</p></div>}
+                    @if (isDirectPromoVideo(course()?.promoVideoUrl)) {<video [src]="course()?.promoVideoUrl | mediaUrl" controls class="w-full h-full object-contain"></video>} @else if (promoEmbedUrl()) {<iframe [src]="promoEmbedUrl()" title="Course promotional video preview" class="w-full h-full border-0" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>} @else {<div class="text-center text-[#a18d7b]"><span class="material-symbols-outlined text-5xl">smart_display</span><p class="text-xs mt-2">No promotional video</p></div>}
                     @if (isUploadingVideo()) {<div class="absolute inset-0 bg-[#040810]/90 backdrop-blur-sm grid place-items-center"><div class="text-center"><span class="material-symbols-outlined text-3xl text-[#3B82F6] animate-spin">progress_activity</span><p class="font-['JetBrains_Mono'] text-[11px] text-white mt-2">Uploading video…</p></div></div>}
                   </div>
                   <div class="rounded-xl border border-[#1E293B] bg-[#040810]/45 p-5 flex flex-col gap-4">
@@ -463,37 +464,42 @@ import {
                 </div>
               </div>
 
-              <!-- Create Coupon Section -->
-              <div class="border border-[#1E293B] bg-[#040810]/60 rounded-lg p-6 flex flex-col gap-4">
-                <div class="flex justify-between items-center">
-                  <div>
-                    <h3 class="font-['Hanken_Grotesk'] text-base font-bold text-white">Monthly Coupons</h3>
-                  </div>
-                  <button (click)="showCouponForm = !showCouponForm" class="font-['JetBrains_Mono'] text-xs font-bold text-white bg-[#3B82F6] px-4 py-2 rounded hover:bg-[#3B82F6]/90 transition-colors">
-                    Create Coupon
+              <section class="border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#040810] rounded-lg p-6 flex flex-col gap-4" aria-label="Course coupon">
+                <div class="flex justify-between items-center gap-4">
+                  <h3 class="font-bold text-slate-900 dark:text-white">Course coupon</h3>
+                  <button type="button" role="switch" [attr.aria-checked]="couponActive" aria-label="Enable course coupon"
+                    [disabled]="couponSaving() || couponLoading() || !savedCoupon()"
+                    (click)="toggleCourseCoupon()"
+                    class="px-4 py-2 rounded-full border font-semibold disabled:opacity-50"
+                    [class.bg-emerald-600]="couponActive" [class.!text-white]="couponActive">
+                    {{ couponActive ? 'Active' : 'Inactive' }}
                   </button>
                 </div>
-
-                @if (showCouponForm) {
-                  <div class="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-[#1E293B] pt-4 mt-2">
-                    <input
-                      type="text"
-                      [(ngModel)]="newCouponCode"
-                      placeholder="COUPON CODE (e.g. VIBE95)"
-                      class="bg-[#121A2B] border border-[#1E293B] rounded px-3 py-2 text-xs text-white font-['JetBrains_Mono'] uppercase"
-                    />
-                    <input
-                      type="number"
-                      [(ngModel)]="newCouponDiscount"
-                      placeholder="Discount Amount (₹)"
-                      class="bg-[#121A2B] border border-[#1E293B] rounded px-3 py-2 text-xs text-white font-['JetBrains_Mono']"
-                    />
-                    <button (click)="createCoupon()" class="font-['JetBrains_Mono'] text-xs font-bold text-[#040810] bg-[#3B82F6] py-2 rounded">
-                      Save & Activate
-                    </button>
-                  </div>
+                @if (couponLoading()) { <p role="status">Loading coupon…</p> }
+                <p class="text-sm text-slate-600 dark:text-slate-300">Save and activate one coupon for this course. You can update it here at any time.</p>
+                <fieldset [disabled]="couponSaving() || couponLoading()" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <label class="text-sm">Coupon code
+                    <input [(ngModel)]="newCouponCode" (ngModelChange)="couponMessage.set('')" placeholder="e.g. LEARN100" class="mt-2 w-full border rounded p-3 uppercase" />
+                  </label>
+                  <label class="text-sm">Discount type
+                    <select [(ngModel)]="couponDiscountType" class="mt-2 w-full border rounded p-3">
+                      <option value="amount">Fixed amount (₹)</option><option value="percent">Percentage (%)</option>
+                    </select>
+                  </label>
+                  <label class="text-sm">{{ couponDiscountType === 'percent' ? 'Discount (%)' : 'Discount (₹)' }}
+                    <input type="number" min="0.01" [max]="couponDiscountType === 'percent' ? 100 : null" [(ngModel)]="newCouponDiscount" class="mt-2 w-full border rounded p-3" />
+                  </label>
+                  <button type="button" (click)="saveCourseCoupon(true)" class="admin-action-primary self-end rounded px-4 py-3 bg-[#2563EB] !text-white font-semibold">
+                    {{ couponSaving() ? 'Saving…' : 'Save & activate' }}
+                  </button>
+                </fieldset>
+                @if (couponMessage()) { <p role="status" class="rounded p-3 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{{ couponMessage() }}</p> }
+                @if (couponError()) { <p role="alert" class="rounded p-3 bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200">{{ couponError() }} <button type="button" (click)="loadCourseCoupon()" class="underline">Reload saved coupon</button></p> }
+                @if (savedCoupon(); as coupon) {
+                  <p class="text-sm text-slate-600 dark:text-slate-300">Created {{ coupon.createdAt | date:'medium' }} · Used {{ coupon.timesUsed }} times</p>
+                  <p class="text-xs text-slate-600 dark:text-slate-300">This coupon also appears in Admin → Coupons. Existing student enrollments remain valid when this coupon changes.</p>
                 }
-              </div>
+              </section>
             </div>
           }
 
@@ -589,6 +595,32 @@ import {
       </div>
     </div>
   `,
+  styles: [
+    `
+      /* "animate-in fade-in duration-200" above are Tailwind Animate
+         utility classes — this project doesn't have that plugin installed,
+         so without this the save badge used to just pop in with no
+         animation at all. This gives the same effect with plain CSS. */
+      .save-badge-in {
+        animation: save-badge-in 220ms ease-out both;
+      }
+      @keyframes save-badge-in {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .save-badge-in {
+          animation: none;
+        }
+      }
+    `,
+  ],
 })
 export class CourseEditorComponent implements OnInit {
   private route = inject(ActivatedRoute);
@@ -600,7 +632,13 @@ export class CourseEditorComponent implements OnInit {
   course = signal<Course | null>(null);
   modules = signal<Module[]>([]);
   promoEmbedUrl = signal<SafeResourceUrl | null>(null);
-  coupons = signal<Coupon[]>([]);
+  savedCoupon = signal<Coupon | null>(null);
+  couponLoading = signal(false);
+  couponSaving = signal(false);
+  couponMessage = signal('');
+  couponError = signal('');
+  couponActive = false;
+  couponDiscountType: 'amount' | 'percent' = 'amount';
   courseStudents = signal<CourseStudent[]>([]);
   isLoading = signal(true);
   isSaving = signal(false);
@@ -628,7 +666,6 @@ export class CourseEditorComponent implements OnInit {
 
   referralUrl = '';
   copiedLink = false;
-  showCouponForm = false;
   studentSearch = '';
   private studentSearchTimer?: ReturnType<typeof setTimeout>;
 
@@ -643,17 +680,15 @@ export class CourseEditorComponent implements OnInit {
         next: (c) => {
           this.course.set(c);
           this.modules.set(c.modules || []);
+          this.loadCourseCoupon();
           this.promoEmbedUrl.set(this.toPromoEmbedUrl(c.promoVideoUrl));
-          this.referralUrl = `https://technyks.com/courses/${c.slug}?referralCode=3BDC`;
+          this.referralUrl = `https://courses.codingtechnyks.com/courses/${c.slug}?referralCode=3BDC`;
           this.isLoading.set(false);
         },
         error: () => this.isLoading.set(false),
       });
     } else this.isLoading.set(false);
 
-    this.adminService.getCoupons().subscribe({
-      next: (data) => this.coupons.set(data),
-    });
   }
 
   togglePublishStatus() {
@@ -920,24 +955,63 @@ export class CourseEditorComponent implements OnInit {
     }
   }
 
-  createCoupon() {
-    if (!this.newCouponCode) return;
-    this.adminService
-      .createCoupon({
-        code: this.newCouponCode,
-        discountAmount: this.newCouponDiscount || 479,
-        scope: 'COURSE',
-        courseId: this.course()?.id,
-      })
-      .subscribe({
-        next: () => {
-          this.showCouponForm = false;
-          this.newCouponCode = '';
-          this.adminService
-            .getCoupons()
-            .subscribe((data) => this.coupons.set(data));
-        },
-      });
+  loadCourseCoupon() {
+    const id = this.course()?.id;
+    if (!id || this.couponSaving()) return;
+    this.couponLoading.set(true);
+    this.couponError.set('');
+    this.adminService.getCourseCoupon(id).subscribe({
+      next: coupon => { this.setSavedCoupon(coupon); this.couponLoading.set(false); },
+      error: error => { this.couponLoading.set(false); this.couponError.set(error?.error?.message || 'Could not load the saved coupon. Reload before editing.'); },
+    });
+  }
+
+  private setSavedCoupon(coupon: Coupon | null) {
+    this.savedCoupon.set(coupon);
+    this.newCouponCode = coupon?.code || '';
+    this.couponActive = coupon?.isActive === true;
+    this.couponDiscountType = coupon?.discountPercent ? 'percent' : 'amount';
+    this.newCouponDiscount = coupon?.discountPercent ?? coupon?.discountAmount ?? 479;
+  }
+
+  toggleCourseCoupon() {
+    const coupon = this.savedCoupon();
+    if (!coupon) return;
+    // A toggle changes the saved record only; unsaved code edits need Save.
+    this.persistCourseCoupon({ isActive: !coupon.isActive }, false);
+  }
+
+  saveCourseCoupon(active: boolean) {
+    const discount = Number(this.newCouponDiscount);
+    if (!this.newCouponCode.trim() || !Number.isFinite(discount) || discount <= 0 || (this.couponDiscountType === 'percent' && discount > 100)) {
+      this.couponError.set('Enter a coupon code and a valid discount.');
+      return;
+    }
+    this.persistCourseCoupon({
+      code: this.newCouponCode.trim().toUpperCase(),
+      discountAmount: this.couponDiscountType === 'amount' ? discount : null,
+      discountPercent: this.couponDiscountType === 'percent' ? discount : null,
+      isActive: active,
+    }, true);
+  }
+
+  private persistCourseCoupon(payload: Partial<Coupon>, isSave: boolean) {
+    const id = this.course()?.id;
+    if (!id || this.couponSaving() || this.couponLoading()) return;
+    this.couponSaving.set(true);
+    this.couponMessage.set('');
+    this.couponError.set('');
+    this.adminService.saveCourseCoupon(id, payload).subscribe({
+      next: coupon => {
+        this.setSavedCoupon(coupon);
+        this.couponSaving.set(false);
+        this.couponMessage.set(isSave ? 'Coupon saved and activated successfully.' : coupon.isActive ? 'Coupon enabled successfully.' : 'Coupon disabled successfully.');
+      },
+      error: error => {
+        this.couponSaving.set(false);
+        this.couponError.set(error?.error?.message || 'Coupon was not saved. Please try again.');
+      },
+    });
   }
 
   openStudentsTab() {

@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import {
   Injectable,
   ForbiddenException,
@@ -26,11 +27,11 @@ export class VideoService {
         });
         usingDatabase = true;
       } catch {
-        // Use the local adapter if the database becomes unavailable.
+        throw new ServiceUnavailableException('Your data could not be loaded or saved. Please retry shortly.');
       }
     }
 
-    if (!lesson) {
+    if (!lesson && !usingDatabase) {
       for (const course of this.prisma.inMemoryCourses) {
         for (const module of course.modules || []) {
           const found = (module.lessons || []).find(
@@ -67,22 +68,22 @@ export class VideoService {
               userId_courseId: { userId, courseId: lesson.module.courseId },
             },
           });
-          activeSub = await this.prisma.subscription.findFirst({
-            where: { userId, status: 'ACTIVE' },
+          activeSub = enrollment ? null : await this.prisma.subscription.findFirst({
+            where: { userId, status: 'ACTIVE', currentPeriodEnd: { gt: new Date() } },
             include: { plan: { include: { courseAccess: true } } },
           });
         } catch {
-          // Use the local adapter below.
+        throw new ServiceUnavailableException('Your data could not be loaded or saved. Please retry shortly.');
         }
       }
 
-      if (!enrollment) {
+      if (!enrollment && !usingDatabase) {
         enrollment = this.prisma.inMemoryEnrollments.find(
           (item) =>
             item.userId === userId && item.courseId === lesson.module.courseId,
         );
       }
-      if (!activeSub) {
+      if (!activeSub && !usingDatabase) {
         activeSub = this.prisma.inMemorySubscriptions.find(
           (item) => item.userId === userId && item.status === 'ACTIVE',
         );
@@ -206,11 +207,13 @@ export class VideoService {
   }
 
   private hasMembershipCourseAccess(subscription: any, courseId: string): boolean {
-    if (!subscription || subscription.status !== 'ACTIVE') return false;
+    if (!subscription || subscription.status !== 'ACTIVE' ||
+      !subscription.currentPeriodEnd || new Date(subscription.currentPeriodEnd).getTime() <= Date.now()) return false;
     const plan = subscription.plan || this.prisma.inMemoryMembershipPlans.find(
       (candidate) => candidate.id === subscription.planId,
     );
-    if (!plan || plan.accessAllCourses !== false) return true;
+    if (!plan) return false;
+    if (plan.accessAllCourses === true) return true;
     return (plan.courseAccess || []).some(
       (access: any) => (access.courseId || access) === courseId,
     );

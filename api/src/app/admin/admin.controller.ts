@@ -135,6 +135,16 @@ export class AdminController {
     return this.adminService.getAllCoupons();
   }
 
+  @Get('courses/:id/coupon')
+  async getCourseCoupon(@Param('id') id: string) {
+    return this.adminService.getCourseCoupon(id);
+  }
+
+  @Patch('courses/:id/coupon')
+  async saveCourseCoupon(@Param('id') id: string, @Body() dto: any) {
+    return this.adminService.saveCourseCoupon(id, dto);
+  }
+
   @Post('coupons')
   async createCoupon(@Body() dto: any) {
     return this.adminService.createCoupon(dto);

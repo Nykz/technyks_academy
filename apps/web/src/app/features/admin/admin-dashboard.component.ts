@@ -1,7 +1,7 @@
 import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterModule, Router } from '@angular/router';
+import { ActivatedRoute, RouterModule, Router } from '@angular/router';
 import {
   AdminService,
   RevenueMetrics,
@@ -10,6 +10,10 @@ import {
   MembershipPlan,
 } from '../../core/services/admin.service';
 import { CoursesService, Course } from '../../core/services/courses.service';
+import {
+  TemplatesService,
+  AdminUiTemplate,
+} from '../../core/services/templates.service';
 import {
   ContactService,
   ContactMessage,
@@ -20,6 +24,21 @@ import {
   AnnouncementBarSettings,
 } from '../../core/services/site-settings.service';
 import { AdminCommunicationComponent } from './admin-communication.component';
+import { AdminTemplatesComponent } from './admin-templates.component';
+import { AdminTemplateOrdersComponent } from './admin-template-orders.component';
+import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
+
+type AdminTab =
+  | 'courses'
+  | 'templates'
+  | 'template-orders'
+  | 'revenue'
+  | 'students'
+  | 'coupons'
+  | 'membership'
+  | 'communication'
+  | 'support'
+  | 'settings';
 
 @Component({
   selector: 'app-admin-dashboard',
@@ -29,128 +48,63 @@ import { AdminCommunicationComponent } from './admin-communication.component';
     FormsModule,
     RouterModule,
     AdminCommunicationComponent,
+    AdminTemplatesComponent,
+    AdminTemplateOrdersComponent,
+    MediaUrlPipe,
   ],
   template: `
-    <div class="admin-shell min-h-screen bg-[#040810] text-[#e0e3e5] pt-16 sm:pt-20 lg:pt-24 pb-16 sm:pb-20 px-4 sm:px-6 lg:px-10 max-w-7xl mx-auto overflow-x-hidden">
-      
-      <!-- Top Udemy Instructor Header -->
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-[#1E293B] pb-6">
-        <div>
-          <div class="inline-flex items-center gap-2 font-['JetBrains_Mono'] text-xs text-[#1D4ED8] dark:text-[#3B82F6] px-3.5 py-1.5 border border-[#2563EB]/40 dark:border-[#3B82F6]/30 bg-blue-50/90 dark:bg-[#3B82F6]/10 rounded-full w-fit mb-2 font-bold">
-            <span class="material-symbols-outlined text-[16px]">school</span>
-            TECHNYKS INSTRUCTOR STUDIO
-          </div>
-          <h1 class="font-['Hanken_Grotesk'] text-3xl font-bold text-white">Course Management & Dashboard</h1>
+    <div class="admin-shell mx-auto flex min-h-screen max-w-[1720px] items-start bg-slate-100 pt-16 text-slate-900 dark:bg-[#040810] dark:text-[#e0e3e5] sm:pt-20 lg:pt-24">
+      <aside class="sticky top-16 z-20 h-[calc(100vh-4rem)] w-20 shrink-0 overflow-y-auto border-r border-slate-200 bg-white px-2 py-5 shadow-sm dark:border-white/10 dark:bg-[#080D18] sm:top-20 sm:h-[calc(100vh-5rem)] lg:top-24 lg:h-[calc(100vh-6rem)] md:w-64 md:px-4">
+        <div class="mb-6 flex items-center gap-3 px-2">
+          <span class="material-symbols-outlined rounded-xl bg-blue-600 p-2.5 !text-white">school</span>
+          <div class="hidden min-w-0 md:block"><strong class="block truncate text-sm text-slate-950 dark:text-white">Instructor Studio</strong><span class="font-['JetBrains_Mono'] text-[9px] uppercase tracking-widest text-blue-600">Technyks Admin</span></div>
         </div>
+        @for (group of adminNavigation; track group.label) {
+          <p class="mb-2 mt-5 hidden px-3 font-['JetBrains_Mono'] text-[9px] font-bold uppercase tracking-[.18em] text-slate-400 md:block">{{ group.label }}</p>
+          <nav class="space-y-1" [attr.aria-label]="group.label">
+            @for (item of group.items; track item.id) {
+              <button type="button" (click)="activeTab.set(item.id)" [attr.aria-label]="item.label" [attr.title]="item.label" [class.admin-side-active]="activeTab() === item.id" class="admin-side-link">
+                <span class="material-symbols-outlined text-[20px]">{{ item.icon }}</span>
+                <span class="hidden flex-1 text-left md:block">{{ item.label }}</span>
+                @if (item.id === 'support' && unreadMessagesCount() > 0) {
+                  <span class="rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold !text-white">{{ unreadMessagesCount() }}</span>
+                }
+              </button>
+            }
+          </nav>
+        }
+        <div class="mt-6 border-t border-slate-200 pt-4 dark:border-white/10">
+          <a routerLink="/" class="admin-side-link" aria-label="View storefront" title="View storefront"><span class="material-symbols-outlined text-[20px]">storefront</span><span class="hidden md:block">View storefront</span></a>
+        </div>
+      </aside>
 
-        <div class="flex flex-wrap items-center gap-3">
-          <button (click)="createNewCourse()" class="admin-action-primary font-['JetBrains_Mono'] text-xs font-bold uppercase !text-white bg-[#2563EB] hover:bg-[#1D4ED8] px-6 py-3 shadow-lg flex items-center gap-2 w-fit">
+      <main class="min-w-0 flex-1 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+      <div class="mb-8 flex flex-col justify-between gap-4 border-b border-slate-200 pb-6 dark:border-[#1E293B] md:flex-row md:items-center">
+        <div>
+          <div class="mb-2 inline-flex w-fit items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3.5 py-1.5 font-['JetBrains_Mono'] text-xs font-bold text-blue-700 dark:border-[#3B82F6]/30 dark:bg-[#3B82F6]/10 dark:text-[#60A5FA]">
+            <span class="material-symbols-outlined text-[16px]">dashboard</span>
+            ADMIN CONTROL CENTER
+          </div>
+          <h1 class="font-['Hanken_Grotesk'] text-3xl font-bold text-slate-950 dark:text-white">{{ activeTitle() }}</h1>
+        </div>
+        @if (activeTab() === 'courses') {
+          <button (click)="createNewCourse()" class="admin-action-primary flex w-fit items-center gap-2 bg-[#2563EB] px-6 py-3 font-['JetBrains_Mono'] text-xs font-bold uppercase !text-white shadow-lg hover:bg-[#1D4ED8]">
             <span class="material-symbols-outlined text-sm">add</span>
             New Course
           </button>
-        </div>
-      </div>
-
-      <!-- Navigation Tabs -->
-      <div class="flex gap-6 border-b border-[#1E293B] mb-8 font-['JetBrains_Mono'] text-xs uppercase overflow-x-auto">
-        <button
-          (click)="activeTab.set('courses')"
-          [class.border-b-2]="activeTab() === 'courses'"
-          [class.border-[#3B82F6]]="activeTab() === 'courses'"
-          [class.text-[#3B82F6]]="activeTab() === 'courses'"
-          [class.text-[#d9c3af]]="activeTab() !== 'courses'"
-          class="pb-3 px-1 font-bold transition-colors shrink-0"
-        >
-          Courses (Udemy Roster)
-        </button>
-
-        <button
-          (click)="activeTab.set('revenue')"
-          [class.border-b-2]="activeTab() === 'revenue'"
-          [class.border-[#3B82F6]]="activeTab() === 'revenue'"
-          [class.text-[#3B82F6]]="activeTab() === 'revenue'"
-          [class.text-[#d9c3af]]="activeTab() !== 'revenue'"
-          class="pb-3 px-1 font-bold transition-colors shrink-0"
-        >
-          Analytics & Revenue
-        </button>
-
-        <button
-          (click)="activeTab.set('students')"
-          [class.border-b-2]="activeTab() === 'students'"
-          [class.border-[#3B82F6]]="activeTab() === 'students'"
-          [class.text-[#3B82F6]]="activeTab() === 'students'"
-          [class.text-[#d9c3af]]="activeTab() !== 'students'"
-          class="pb-3 px-1 font-bold transition-colors shrink-0"
-        >
-          Students
-        </button>
-
-        <button
-          (click)="activeTab.set('coupons')"
-          [class.border-b-2]="activeTab() === 'coupons'"
-          [class.border-[#3B82F6]]="activeTab() === 'coupons'"
-          [class.text-[#3B82F6]]="activeTab() === 'coupons'"
-          [class.text-[#d9c3af]]="activeTab() !== 'coupons'"
-          class="pb-3 px-1 font-bold transition-colors shrink-0"
-        >
-          Coupons
-        </button>
-
-        <button
-          (click)="activeTab.set('membership')"
-          [class.border-b-2]="activeTab() === 'membership'"
-          [class.border-[#3B82F6]]="activeTab() === 'membership'"
-          [class.text-[#3B82F6]]="activeTab() === 'membership'"
-          [class.text-[#d9c3af]]="activeTab() !== 'membership'"
-          class="pb-3 px-1 font-bold transition-colors shrink-0"
-        >
-          Membership Program
-        </button>
-
-        <button
-          (click)="activeTab.set('communication')"
-          [class.border-b-2]="activeTab() === 'communication'"
-          [class.border-[#3B82F6]]="activeTab() === 'communication'"
-          [class.text-[#3B82F6]]="activeTab() === 'communication'"
-          [class.text-[#d9c3af]]="activeTab() !== 'communication'"
-          class="pb-3 px-1 font-bold transition-colors shrink-0 flex items-center gap-1.5"
-        >
-          <span class="material-symbols-outlined text-[16px]">forum</span>
-          Communication
-        </button>
-
-        <button
-          (click)="activeTab.set('support')"
-          [class.border-b-2]="activeTab() === 'support'"
-          [class.border-[#3B82F6]]="activeTab() === 'support'"
-          [class.text-[#3B82F6]]="activeTab() === 'support'"
-          [class.text-[#d9c3af]]="activeTab() !== 'support'"
-          class="pb-3 px-1 font-bold transition-colors shrink-0 flex items-center gap-2"
-        >
-          <span>Support & Messages</span>
-          @if (unreadMessagesCount() > 0) {
-            <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-[#2563EB] !text-white font-extrabold">
-              {{ unreadMessagesCount() }}
-            </span>
-          }
-        </button>
-
-        <button
-          (click)="activeTab.set('settings')"
-          [class.border-b-2]="activeTab() === 'settings'"
-          [class.border-[#3B82F6]]="activeTab() === 'settings'"
-          [class.text-[#3B82F6]]="activeTab() === 'settings'"
-          [class.text-[#d9c3af]]="activeTab() !== 'settings'"
-          class="pb-3 px-1 font-bold transition-colors shrink-0 flex items-center gap-1.5"
-        >
-          <span class="material-symbols-outlined text-[16px]">tune</span>
-          Site Settings & Banner
-        </button>
+        }
       </div>
 
       @if (activeTab() === 'communication') {
         <app-admin-communication [courses]="publishedCourses()" />
+      }
+
+      @if (activeTab() === 'templates') {
+        <app-admin-templates />
+      }
+
+      @if (activeTab() === 'template-orders') {
+        <app-admin-template-orders />
       }
 
       <!-- TAB 1: UDEMY COURSES ROSTER (Screenshot 1) -->
@@ -207,7 +161,7 @@ import { AdminCommunicationComponent } from './admin-communication.component';
                 <!-- Left: Thumbnail & Title -->
                 <div class="flex min-w-0 items-center gap-3 sm:gap-5">
                   <div class="relative w-24 h-16 sm:w-36 sm:h-20 rounded-lg overflow-hidden shrink-0 border border-[#1E293B]">
-                    <img [src]="course.thumbnail || '/assets/agentic-ai.jpg'" [alt]="course.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    <img [src]="(course.thumbnail || '/assets/agentic-ai.jpg') | mediaUrl" [alt]="course.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                   </div>
 
                   <div class="min-w-0 flex flex-col gap-1.5">
@@ -347,14 +301,154 @@ import { AdminCommunicationComponent } from './admin-communication.component';
 
       <!-- TAB 4: COUPONS -->
       @if (activeTab() === 'coupons') {
-        <div class="bg-[#121A2B] technical-border rounded p-6">
-          <h3 class="font-['Hanken_Grotesk'] text-base font-bold text-white mb-4">Active System Coupons</h3>
+        <!-- Guided coupon creation wizard -->
+        <div class="mb-8 border border-[#1E293B] bg-[#040810]/60 rounded-lg p-6">
+          <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+              <h3 class="font-['Hanken_Grotesk'] text-base font-bold text-white">Create a new coupon</h3>
+              <p class="font-['Inter'] text-xs text-[#a18d7b] mt-1">Every coupon is locked to exactly one course or one UI template product, so it can never accidentally discount the wrong item — just like a unique product ID in an online store.</p>
+            </div>
+            @if (newCouponScope()) {
+              <button type="button" (click)="resetCouponWizard()" class="shrink-0 font-['JetBrains_Mono'] text-[10px] uppercase text-[#a18d7b] hover:text-white transition-colors">Start over</button>
+            }
+          </div>
+
+          <div class="flex items-center gap-2 mb-6 font-['JetBrains_Mono'] text-[10px] uppercase">
+            @for (step of [1, 2, 3, 4]; track step) {
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 flex items-center justify-center rounded-full border" [class.border-[#3B82F6]]="newCouponStep() >= step" [class.text-[#3B82F6]]="newCouponStep() >= step" [class.border-[#1E293B]]="newCouponStep() < step" [class.text-[#a18d7b]]="newCouponStep() < step">{{ step }}</span>
+                @if (step < 4) { <span class="w-6 h-px" [class.bg-[#3B82F6]]="newCouponStep() > step" [class.bg-[#1E293B]]="newCouponStep() <= step"></span> }
+              </div>
+            }
+          </div>
+
+          <!-- Step 1: scope -->
+          @if (newCouponStep() === 1) {
+            <div>
+              <p class="font-['Inter'] text-sm text-white mb-3">What is this coupon for?</p>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button type="button" (click)="selectCouponScope('COURSE')" class="text-left p-4 rounded border border-[#1E293B] hover:border-[#3B82F6] transition-colors">
+                  <span class="material-symbols-outlined text-[#3B82F6] mb-2 block">school</span>
+                  <span class="font-['Hanken_Grotesk'] font-bold text-white block">A course</span>
+                  <span class="font-['Inter'] text-[11px] text-[#a18d7b]">Locks the discount to one specific course.</span>
+                </button>
+                <button type="button" (click)="selectCouponScope('TEMPLATE')" class="text-left p-4 rounded border border-[#1E293B] hover:border-[#3B82F6] transition-colors">
+                  <span class="material-symbols-outlined text-[#3B82F6] mb-2 block">web</span>
+                  <span class="font-['Hanken_Grotesk'] font-bold text-white block">A UI template</span>
+                  <span class="font-['Inter'] text-[11px] text-[#a18d7b]">Locks the discount to one specific template product.</span>
+                </button>
+                <button type="button" (click)="selectCouponScope('MEMBERSHIP')" class="text-left p-4 rounded border border-[#1E293B] hover:border-[#3B82F6] transition-colors">
+                  <span class="material-symbols-outlined text-[#3B82F6] mb-2 block">workspace_premium</span>
+                  <span class="font-['Hanken_Grotesk'] font-bold text-white block">Membership plans</span>
+                  <span class="font-['Inter'] text-[11px] text-[#a18d7b]">Applies at membership checkout only.</span>
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- Step 2: pick the specific product -->
+          @if (newCouponStep() === 2 && newCouponScope() === 'COURSE') {
+            <div>
+              <p class="font-['Inter'] text-sm text-white mb-3">Which course should this coupon apply to?</p>
+              @if (!publishedCourses().length) {
+                <p class="font-['JetBrains_Mono'] text-xs text-[#a18d7b]">No courses yet — create one from the Courses tab first.</p>
+              } @else {
+                <select [(ngModel)]="newCouponCourseId" class="w-full max-w-md bg-[#121A2B] border border-[#1E293B] rounded px-3 py-2.5 text-sm text-white font-['JetBrains_Mono']">
+                  <option value="" disabled>Select a course…</option>
+                  @for (course of publishedCourses(); track course.id) {
+                    <option [value]="course.id">{{ course.title }}</option>
+                  }
+                </select>
+                <p class="font-['JetBrains_Mono'] text-[10px] text-[#a18d7b] mt-2">Unique product ID: {{ newCouponCourseId || '—' }}</p>
+              }
+              <div class="flex gap-3 mt-5">
+                <button type="button" (click)="goToCouponStep(1)" class="font-['JetBrains_Mono'] text-xs text-[#a18d7b] hover:text-white">← Back</button>
+                <button type="button" [disabled]="!newCouponCourseId" (click)="goToCouponStep(3)" class="ml-auto font-['JetBrains_Mono'] text-xs font-bold text-[#040810] bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 px-5 py-2 rounded transition-colors">Continue →</button>
+              </div>
+            </div>
+          }
+          @if (newCouponStep() === 2 && newCouponScope() === 'TEMPLATE') {
+            <div>
+              <p class="font-['Inter'] text-sm text-white mb-3">Which UI template product should this coupon apply to?</p>
+              @if (isLoadingAdminTemplates()) {
+                <p class="font-['JetBrains_Mono'] text-xs text-[#a18d7b]">Loading templates…</p>
+              } @else if (!adminTemplates().length) {
+                <p class="font-['JetBrains_Mono'] text-xs text-[#a18d7b]">No UI template products yet — add one from the Templates tab first.</p>
+              } @else {
+                <select [(ngModel)]="newCouponTemplateId" class="w-full max-w-md bg-[#121A2B] border border-[#1E293B] rounded px-3 py-2.5 text-sm text-white font-['JetBrains_Mono']">
+                  <option value="" disabled>Select a UI template…</option>
+                  @for (tpl of adminTemplates(); track tpl.id) {
+                    <option [value]="tpl.id">{{ tpl.title }}</option>
+                  }
+                </select>
+                <p class="font-['JetBrains_Mono'] text-[10px] text-[#a18d7b] mt-2">Unique product ID: {{ newCouponTemplateId || '—' }}</p>
+              }
+              <div class="flex gap-3 mt-5">
+                <button type="button" (click)="goToCouponStep(1)" class="font-['JetBrains_Mono'] text-xs text-[#a18d7b] hover:text-white">← Back</button>
+                <button type="button" [disabled]="!newCouponTemplateId" (click)="goToCouponStep(3)" class="ml-auto font-['JetBrains_Mono'] text-xs font-bold text-[#040810] bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 px-5 py-2 rounded transition-colors">Continue →</button>
+              </div>
+            </div>
+          }
+
+          <!-- Step 3: discount -->
+          @if (newCouponStep() === 3) {
+            <div>
+              <p class="font-['Inter'] text-sm text-white mb-3">How much discount should this coupon give?</p>
+              <div class="flex gap-3 mb-4">
+                <button type="button" (click)="newCouponDiscountType.set('percent')" class="px-4 py-2 rounded font-['JetBrains_Mono'] text-xs font-bold border transition-colors" [class.border-[#3B82F6]]="newCouponDiscountType() === 'percent'" [class.text-[#3B82F6]]="newCouponDiscountType() === 'percent'" [class.border-[#1E293B]]="newCouponDiscountType() !== 'percent'" [class.text-[#a18d7b]]="newCouponDiscountType() !== 'percent'">Percentage off</button>
+                <button type="button" (click)="newCouponDiscountType.set('amount')" class="px-4 py-2 rounded font-['JetBrains_Mono'] text-xs font-bold border transition-colors" [class.border-[#3B82F6]]="newCouponDiscountType() === 'amount'" [class.text-[#3B82F6]]="newCouponDiscountType() === 'amount'" [class.border-[#1E293B]]="newCouponDiscountType() !== 'amount'" [class.text-[#a18d7b]]="newCouponDiscountType() !== 'amount'">Fixed ₹ off</button>
+              </div>
+              <div class="flex items-center gap-2 max-w-xs">
+                @if (newCouponDiscountType() === 'percent') {
+                  <input type="number" min="1" max="100" [(ngModel)]="newCouponDiscountValue" placeholder="e.g. 90" class="w-full bg-[#121A2B] border border-[#1E293B] rounded px-3 py-2.5 text-sm text-white font-['JetBrains_Mono']" />
+                  <span class="font-['JetBrains_Mono'] text-white">%</span>
+                } @else {
+                  <span class="font-['JetBrains_Mono'] text-white">₹</span>
+                  <input type="number" min="1" [(ngModel)]="newCouponDiscountValue" placeholder="e.g. 500" class="w-full bg-[#121A2B] border border-[#1E293B] rounded px-3 py-2.5 text-sm text-white font-['JetBrains_Mono']" />
+                }
+              </div>
+              <div class="flex gap-3 mt-5">
+                <button type="button" (click)="goToCouponStep(newCouponScope() === 'MEMBERSHIP' ? 1 : 2)" class="font-['JetBrains_Mono'] text-xs text-[#a18d7b] hover:text-white">← Back</button>
+                <button type="button" [disabled]="!isCouponDiscountValid()" (click)="goToCouponStep(4)" class="ml-auto font-['JetBrains_Mono'] text-xs font-bold text-[#040810] bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 px-5 py-2 rounded transition-colors">Continue →</button>
+              </div>
+            </div>
+          }
+
+          <!-- Step 4: code + confirm -->
+          @if (newCouponStep() === 4) {
+            <div>
+              <p class="font-['Inter'] text-sm text-white mb-3">What should the coupon code be?</p>
+              <input type="text" [(ngModel)]="newCouponCodeInput" placeholder="e.g. LAUNCH90" class="w-full max-w-xs bg-[#121A2B] border border-[#1E293B] rounded px-3 py-2.5 text-sm text-white font-['JetBrains_Mono'] uppercase" />
+
+              <div class="mt-5 p-4 rounded border border-[#1E293B] bg-[#0A1120] font-['JetBrains_Mono'] text-[11px] text-[#d9c3af] max-w-md">
+                <div class="flex justify-between py-1"><span class="text-[#a18d7b]">Applies to</span><span class="text-white">{{ couponWizardTargetLabel() }}</span></div>
+                <div class="flex justify-between py-1"><span class="text-[#a18d7b]">Discount</span><span class="text-white">{{ newCouponDiscountType() === 'percent' ? (newCouponDiscountValue + '%') : ('₹' + newCouponDiscountValue) }} off</span></div>
+                <div class="flex justify-between py-1"><span class="text-[#a18d7b]">Code</span><span class="text-[#3B82F6] font-bold">{{ (newCouponCodeInput || '—').toUpperCase() }}</span></div>
+              </div>
+
+              @if (newCouponError()) { <p role="alert" class="mt-3 text-xs text-red-400">{{ newCouponError() }}</p> }
+              @if (newCouponFeedback()) { <p role="status" class="mt-3 text-xs text-emerald-400">{{ newCouponFeedback() }}</p> }
+
+              <div class="flex gap-3 mt-5">
+                <button type="button" (click)="goToCouponStep(3)" class="font-['JetBrains_Mono'] text-xs text-[#a18d7b] hover:text-white">← Back</button>
+                <button type="button" [disabled]="!newCouponCodeInput.trim() || creatingCoupon()" (click)="createCouponFromWizard()" class="ml-auto font-['JetBrains_Mono'] text-xs font-bold text-[#040810] bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 px-5 py-2 rounded transition-colors">{{ creatingCoupon() ? 'Creating…' : 'Create coupon' }}</button>
+              </div>
+            </div>
+          }
+        </div>
+
+        <div class="bg-[#121A2B] technical-border rounded p-6 overflow-x-auto">
+          <h3 class="font-['Hanken_Grotesk'] text-base font-bold text-white mb-4">All coupons</h3>
+          @if (couponFeedback()) { <p role="status" class="mb-4 text-sm text-emerald-700 dark:text-emerald-300">{{ couponFeedback() }}</p> }
+          @if (couponError()) { <p role="alert" class="mb-4 text-sm text-red-700 dark:text-red-300">{{ couponError() }}</p> }
           <table class="w-full text-left font-['Inter'] text-xs text-[#d9c3af]">
             <thead class="font-['JetBrains_Mono'] text-[11px] uppercase text-[#a18d7b] bg-[#040810]/60 border-b border-[#1E293B]">
               <tr>
                 <th class="p-3">Code</th>
                 <th class="p-3">Discount</th>
                 <th class="p-3">Times Used</th>
+                <th class="p-3">Product / Created</th>
+                <th class="p-3">Status</th>
                 <th class="p-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -363,14 +457,16 @@ import { AdminCommunicationComponent } from './admin-communication.component';
                 <tr>
                   <td class="p-3"><input [ngModel]="coupon.code" (ngModelChange)="updateCouponField(coupon.id, 'code', $event)" class="w-40 border border-[#1E293B] bg-[#040810] px-2 py-1.5 font-['JetBrains_Mono'] font-bold uppercase text-[#3B82F6]" /></td>
                   <td class="p-3"><div class="flex items-center gap-2"><span class="font-['JetBrains_Mono'] text-[10px] text-[#a18d7b]">{{ coupon.scope }}</span>@if (coupon.discountPercent) {<input type="number" min="1" max="100" [ngModel]="coupon.discountPercent" (ngModelChange)="updateCouponField(coupon.id, 'discountPercent', $event)" class="w-20 border border-[#1E293B] bg-[#040810] px-2 py-1.5 font-['JetBrains_Mono'] text-white" /><span>%</span>} @else {<span>₹</span><input type="number" min="1" [ngModel]="coupon.discountAmount" (ngModelChange)="updateCouponField(coupon.id, 'discountAmount', $event)" class="w-24 border border-[#1E293B] bg-[#040810] px-2 py-1.5 font-['JetBrains_Mono'] text-white" />}</div></td>
-                  <td class="p-3 font-['JetBrains_Mono'] text-[#3B82F6]">{{ coupon.timesUsed }} / Unlimited</td>
+                  <td class="p-3 font-['JetBrains_Mono'] text-[#3B82F6]">{{ coupon.timesUsed }} / {{ coupon.usageLimit ?? 'Unlimited' }}</td>
+                  <td class="p-3"><div>{{ couponCourseName(coupon) }}</div><div class="mt-1 text-slate-600 dark:text-slate-300">{{ coupon.createdAt | date: 'mediumDate' }}</div></td>
+                  <td class="p-3"><button type="button" role="switch" [attr.aria-checked]="coupon.isActive" [attr.aria-label]="'Enable ' + coupon.code" [disabled]="!!savingCouponId()" (click)="toggleCoupon(coupon)" class="rounded-full border px-3 py-1.5 font-semibold disabled:opacity-50" [class.text-emerald-700]="coupon.isActive" [class.dark:text-emerald-300]="coupon.isActive">{{ coupon.isActive ? 'Active' : 'Inactive' }}</button></td>
                   <td class="p-3 text-right">
-                    <button (click)="saveCoupon(coupon)" [disabled]="savingCouponId() === coupon.id" class="mr-4 font-['JetBrains_Mono'] text-[11px] font-bold text-[#3B82F6] hover:underline disabled:opacity-50">
+                    <button (click)="saveCoupon(coupon)" [disabled]="!!savingCouponId()" class="mr-4 font-['JetBrains_Mono'] text-[11px] font-bold text-[#3B82F6] hover:underline disabled:opacity-50">
                       {{ savingCouponId() === coupon.id ? 'Saving…' : (lastSavedCouponId() === coupon.id ? '✓ Saved!' : 'Save') }}
                     </button>
-                    <button (click)="deleteCoupon(coupon.id)" class="font-['JetBrains_Mono'] text-[11px] text-[#ffb4ab] hover:underline">Delete</button>
+                    <button (click)="deleteCoupon(coupon.id)" [disabled]="!!savingCouponId()" class="font-['JetBrains_Mono'] text-[11px] text-red-700 dark:text-red-300 hover:underline disabled:opacity-50">Delete</button>
                     @if (lastSavedCouponId() === coupon.id) {
-                      <div class="text-[10px] font-['JetBrains_Mono'] text-emerald-400 mt-1">✓ Saved at {{ lastSavedTime() }}</div>
+                      <div class="text-[10px] font-['JetBrains_Mono'] text-emerald-700 dark:text-emerald-300 mt-1">✓ Saved at {{ lastSavedTime() }}</div>
                     }
                   </td>
                 </tr>
@@ -777,26 +873,72 @@ import { AdminCommunicationComponent } from './admin-communication.component';
           </div>
         </div>
       }
+      </main>
     </div>
   `,
 })
 export class AdminDashboardComponent implements OnInit {
   private adminService = inject(AdminService);
   private coursesService = inject(CoursesService);
+  private templatesService = inject(TemplatesService);
   private contactService = inject(ContactService);
   private siteSettingsService = inject(SiteSettingsService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
 
-  activeTab = signal<
-    | 'courses'
-    | 'revenue'
-    | 'students'
-    | 'coupons'
-    | 'membership'
-    | 'communication'
-    | 'support'
-    | 'settings'
-  >('courses');
+  readonly adminNavigation: Array<{
+    label: string;
+    items: Array<{ id: AdminTab; label: string; icon: string }>;
+  }> = [
+    {
+      label: 'Learning business',
+      items: [
+        { id: 'courses', label: 'Courses', icon: 'play_lesson' },
+        { id: 'revenue', label: 'Course sales', icon: 'monitoring' },
+        { id: 'students', label: 'Students', icon: 'group' },
+        { id: 'membership', label: 'Memberships', icon: 'workspace_premium' },
+      ],
+    },
+    {
+      label: 'Digital products',
+      items: [
+        { id: 'templates', label: 'UI templates', icon: 'inventory_2' },
+        {
+          id: 'template-orders',
+          label: 'Template orders',
+          icon: 'receipt_long',
+        },
+      ],
+    },
+    {
+      label: 'Engagement',
+      items: [
+        { id: 'communication', label: 'Communication', icon: 'campaign' },
+        { id: 'coupons', label: 'Coupons', icon: 'sell' },
+        { id: 'support', label: 'Support', icon: 'support_agent' },
+      ],
+    },
+    {
+      label: 'System',
+      items: [{ id: 'settings', label: 'Site settings', icon: 'tune' }],
+    },
+  ];
+  activeTab = signal<AdminTab>('courses');
+  activeTitle = computed(() => {
+    const titles: Record<AdminTab, string> = {
+      courses: 'Course Management',
+      templates: 'UI Template Products',
+      'template-orders': 'Template Orders & Sales',
+      revenue: 'Course Sales & Analytics',
+      students: 'Student Directory',
+      coupons: 'Coupon Management',
+      membership: 'Membership Program',
+      communication: 'Communication Center',
+      support: 'Customer Support',
+      settings: 'Site Settings & Banner',
+    };
+    return titles[this.activeTab()];
+  });
   metrics = signal<RevenueMetrics | null>(null);
   students = signal<Student[]>([]);
   coupons = signal<Coupon[]>([]);
@@ -808,6 +950,8 @@ export class AdminDashboardComponent implements OnInit {
 
   savingMembershipPlanId = signal<string | null>(null);
   savingCouponId = signal<string | null>(null);
+  couponFeedback = signal('');
+  couponError = signal('');
   lastSavedPlanId = signal<string | null>(null);
   lastSavedCouponId = signal<string | null>(null);
   lastSavedTime = signal<string>('');
@@ -836,13 +980,47 @@ export class AdminDashboardComponent implements OnInit {
   newMembershipCouponCode = '';
   newMembershipCouponDiscount: number | null = 1000;
 
+  // Guided "create a new coupon" wizard (Coupon Management tab)
+  newCouponStep = signal(1);
+  newCouponScope = signal<'COURSE' | 'TEMPLATE' | 'MEMBERSHIP' | null>(null);
+  newCouponDiscountType = signal<'percent' | 'amount'>('percent');
+  newCouponCourseId = '';
+  newCouponTemplateId = '';
+  newCouponDiscountValue: number | null = null;
+  newCouponCodeInput = '';
+  creatingCoupon = signal(false);
+  newCouponFeedback = signal('');
+  newCouponError = signal('');
+  adminTemplates = signal<AdminUiTemplate[]>([]);
+  isLoadingAdminTemplates = signal(false);
+
   ngOnInit() {
+    const requestedTab = this.route.snapshot.queryParamMap.get(
+      'tab',
+    ) as AdminTab | null;
+    if (
+      requestedTab &&
+      this.adminNavigation.some((group) =>
+        group.items.some((item) => item.id === requestedTab),
+      )
+    ) {
+      this.activeTab.set(requestedTab);
+    }
     this.loadCourses();
     this.adminService.getMetrics().subscribe((data) => this.metrics.set(data));
     this.adminService
       .searchStudents('')
       .subscribe((data) => this.students.set(data));
-    this.adminService.getCoupons().subscribe((data) => this.coupons.set(data));
+    this.adminService
+      .getCoupons()
+      .subscribe({
+        next: (data) => this.coupons.set(data),
+        error: () =>
+          this.couponError.set(
+            'Coupons could not be loaded. Please refresh to retry.',
+          ),
+      });
+    this.loadAdminTemplatesForCoupon();
     this.adminService
       .getMembershipPlans()
       .subscribe((data) => this.membershipPlans.set(data));
@@ -1141,6 +1319,9 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   saveCoupon(coupon: Coupon) {
+    if (this.savingCouponId()) return;
+    this.couponError.set('');
+    this.couponFeedback.set('');
     this.savingCouponId.set(coupon.id);
     this.adminService.updateCoupon(coupon.id, coupon).subscribe({
       next: (saved) => {
@@ -1151,6 +1332,9 @@ export class AdminDashboardComponent implements OnInit {
         );
         this.savingCouponId.set(null);
         this.lastSavedCouponId.set(saved.id);
+        this.couponFeedback.set(
+          `Coupon ${saved.code} saved. Status: ${saved.isActive ? 'Active' : 'Inactive'}.`,
+        );
         this.lastSavedTime.set(
           new Date().toLocaleTimeString([], {
             hour: '2-digit',
@@ -1158,15 +1342,110 @@ export class AdminDashboardComponent implements OnInit {
             second: '2-digit',
           }),
         );
-        setTimeout(() => {
-          if (this.lastSavedCouponId() === saved.id) {
-            this.lastSavedCouponId.set(null);
-          }
-        }, 6000);
       },
       error: (error) => {
         this.savingCouponId.set(null);
-        alert(error?.error?.message || 'The coupon could not be updated.');
+        this.couponError.set(
+          error?.error?.message || 'The coupon could not be updated.',
+        );
+      },
+    });
+  }
+
+  selectCouponScope(scope: 'COURSE' | 'TEMPLATE' | 'MEMBERSHIP') {
+    this.newCouponScope.set(scope);
+    this.newCouponCourseId = '';
+    this.newCouponTemplateId = '';
+    this.newCouponError.set('');
+    if (scope === 'TEMPLATE' && !this.adminTemplates().length && !this.isLoadingAdminTemplates()) {
+      this.loadAdminTemplatesForCoupon();
+    }
+    this.newCouponStep.set(scope === 'MEMBERSHIP' ? 3 : 2);
+  }
+
+  goToCouponStep(step: number) {
+    this.newCouponError.set('');
+    this.newCouponStep.set(step);
+  }
+
+  loadAdminTemplatesForCoupon() {
+    this.isLoadingAdminTemplates.set(true);
+    this.templatesService.listAdmin().subscribe({
+      next: (data) => {
+        this.adminTemplates.set(data);
+        this.isLoadingAdminTemplates.set(false);
+      },
+      error: () => this.isLoadingAdminTemplates.set(false),
+    });
+  }
+
+  isCouponDiscountValid(): boolean {
+    const value = Number(this.newCouponDiscountValue);
+    if (!Number.isFinite(value) || value <= 0) return false;
+    if (this.newCouponDiscountType() === 'percent' && value > 100) return false;
+    return true;
+  }
+
+  couponWizardTargetLabel(): string {
+    const scope = this.newCouponScope();
+    if (scope === 'COURSE') {
+      return (
+        this.publishedCourses().find((course) => course.id === this.newCouponCourseId)?.title ||
+        'Selected course'
+      );
+    }
+    if (scope === 'TEMPLATE') {
+      return (
+        this.adminTemplates().find((tpl) => tpl.id === this.newCouponTemplateId)?.title ||
+        'Selected UI template'
+      );
+    }
+    return 'All membership plans';
+  }
+
+  resetCouponWizard() {
+    this.newCouponStep.set(1);
+    this.newCouponScope.set(null);
+    this.newCouponCourseId = '';
+    this.newCouponTemplateId = '';
+    this.newCouponDiscountType.set('percent');
+    this.newCouponDiscountValue = null;
+    this.newCouponCodeInput = '';
+    this.newCouponError.set('');
+    this.newCouponFeedback.set('');
+  }
+
+  createCouponFromWizard() {
+    if (this.creatingCoupon()) return;
+    const code = this.newCouponCodeInput.trim();
+    const scope = this.newCouponScope();
+    if (!code) { this.newCouponError.set('Enter a coupon code.'); return; }
+    if (!scope) { this.newCouponError.set('Choose what this coupon is for.'); return; }
+    if (scope === 'COURSE' && !this.newCouponCourseId) { this.newCouponError.set('Choose a course first.'); return; }
+    if (scope === 'TEMPLATE' && !this.newCouponTemplateId) { this.newCouponError.set('Choose a UI template product first.'); return; }
+    if (!this.isCouponDiscountValid()) { this.newCouponError.set('Enter a valid discount amount.'); return; }
+
+    this.creatingCoupon.set(true);
+    this.newCouponError.set('');
+    const payload: any = {
+      code,
+      scope,
+      ...(scope === 'COURSE' ? { courseId: this.newCouponCourseId } : {}),
+      ...(scope === 'TEMPLATE' ? { templateProductId: this.newCouponTemplateId } : {}),
+      ...(this.newCouponDiscountType() === 'percent'
+        ? { discountPercent: Number(this.newCouponDiscountValue) }
+        : { discountAmount: Number(this.newCouponDiscountValue) }),
+    };
+    this.adminService.createCoupon(payload).subscribe({
+      next: (coupon) => {
+        this.creatingCoupon.set(false);
+        this.coupons.update((coupons) => [coupon, ...coupons]);
+        this.newCouponFeedback.set(`Coupon "${coupon.code}" created and activated successfully!`);
+        setTimeout(() => this.resetCouponWizard(), 2500);
+      },
+      error: (error) => {
+        this.creatingCoupon.set(false);
+        this.newCouponError.set(error?.error?.message || 'The coupon could not be created.');
       },
     });
   }
@@ -1197,6 +1476,28 @@ export class AdminDashboardComponent implements OnInit {
       });
   }
 
+  couponCourseName(coupon: Coupon) {
+    if (coupon.scope === 'MEMBERSHIP') return 'Membership';
+    if (coupon.scope === 'TEMPLATE') {
+      return (
+        this.adminTemplates().find((tpl) => tpl.id === coupon.templateProductId)
+          ?.title ||
+        coupon.templateProductId ||
+        'UI template'
+      );
+    }
+    return (
+      this.publishedCourses().find((course) => course.id === coupon.courseId)
+        ?.title ||
+      coupon.courseId ||
+      'All courses'
+    );
+  }
+
+  toggleCoupon(coupon: Coupon) {
+    this.saveCoupon({ ...coupon, isActive: !coupon.isActive });
+  }
+
   toggleMessageStatus(id: string) {
     this.contactService.toggleMessageStatus(id).subscribe();
   }
@@ -1221,11 +1522,31 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   deleteCoupon(id: string) {
+    if (
+      this.savingCouponId() ||
+      !window.confirm(
+        'Delete this coupon? Students who already enrolled will keep their access.',
+      )
+    )
+      return;
+    this.savingCouponId.set(id);
+    this.couponError.set('');
     this.adminService.deleteCoupon(id).subscribe({
-      next: () =>
+      next: () => {
+        this.savingCouponId.set(null);
+        this.couponFeedback.set(
+          'Coupon deleted. Existing enrollments are unchanged.',
+        );
         this.coupons.update((coupons) =>
           coupons.filter((coupon) => coupon.id !== id),
-        ),
+        );
+      },
+      error: (error) => {
+        this.savingCouponId.set(null);
+        this.couponError.set(
+          error?.error?.message || 'Could not delete coupon.',
+        );
+      },
     });
   }
 

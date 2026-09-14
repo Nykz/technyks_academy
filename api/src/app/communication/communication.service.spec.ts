@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CommunicationService } from './communication.service';
 
-function createService() {
+function createService(configValues: Record<string, string> = {}) {
   const prisma: any = {
     isDbConnected: false,
     inMemoryUsers: [
@@ -36,7 +36,7 @@ function createService() {
     inMemoryCourseReplies: [],
     inMemoryCourseAnnouncements: [],
   };
-  const config: any = { get: () => undefined };
+  const config: any = { get: (key: string) => configValues[key] };
   return { service: new CommunicationService(prisma, config), prisma };
 }
 
@@ -87,5 +87,20 @@ describe('CommunicationService', () => {
     );
     expect(visible).toHaveLength(1);
     expect(visible[0].title).toBe('New generics workshop');
+  });
+
+  it('reports the verified-domain email setup needed before launch', () => {
+    const { service } = createService({
+      RESEND_API_KEY: 're_test_key',
+      MAIL_FROM: 'Technyks Academy <updates@codingtechnyks.com>',
+      MAIL_REPLY_TO: 'support@codingtechnyks.com',
+    });
+
+    expect(service.getEmailConfiguration()).toMatchObject({
+      provider: 'Resend',
+      configured: true,
+      sendingDomain: 'codingtechnyks.com',
+      replyTo: 'support@codingtechnyks.com',
+    });
   });
 });

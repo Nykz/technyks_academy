@@ -1,13 +1,6 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { catchError, timeout, of } from 'rxjs';
-
-const PRODUCTION_API_ORIGIN = 'https://api.codingtechnyks.com';
-
-function isLocalBrowser() {
-  if (typeof window === 'undefined') return false;
-  return window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1';
-}
+import { PRODUCTION_API_ORIGIN, isLocalBrowser } from '../utils/api-origin';
 
 /**
  * Direct production client-side requests to API backend while ensuring

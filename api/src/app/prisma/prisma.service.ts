@@ -28,6 +28,8 @@ export class PrismaService
   public inMemoryCourseQuestions: any[] = [];
   public inMemoryCourseReplies: any[] = [];
   public inMemoryCourseAnnouncements: any[] = [];
+  public inMemoryUiTemplates: any[] = [];
+  public inMemoryUiTemplatePurchases: any[] = [];
   public inMemorySiteSettings: any | null = null;
 
   async onModuleInit() {
@@ -35,10 +37,19 @@ export class PrismaService
       await this.$connect();
       await this.ensureRuntimeColumns();
       await this.ensureCommunicationTables();
+      await this.ensureTemplateStoreTables();
       this.isDbConnected = true;
       this.logger.log(' Connected successfully to MySQL database via Prisma');
     } catch (error: any) {
       this.isDbConnected = false;
+      const fallbackAllowed =
+        process.env.ALLOW_IN_MEMORY_FALLBACK === 'true' &&
+        process.env.NODE_ENV !== 'production';
+      if (!fallbackAllowed) {
+        throw new Error(
+          'Database initialization failed. Persistent storage is required; check the database connection and schema.',
+        );
+      }
       this.logger.warn(
         `Configured MySQL database not reachable (${error?.message || 'Connection failed'}). ` +
           `Switching seamlessly to high-performance in-memory persistence layer.`,
@@ -68,6 +79,7 @@ export class PrismaService
         table: 'Course',
         sql: "ADD COLUMN `category` VARCHAR(191) NOT NULL DEFAULT 'Web Development'",
       },
+      { table: 'Payment', sql: 'ADD COLUMN `templateProductIds` JSON NULL' },
     ];
 
     for (const addition of additions) {
@@ -135,6 +147,75 @@ export class PrismaService
 
     for (const statement of statements) {
       await this.$executeRawUnsafe(statement);
+    }
+  }
+
+  private async ensureTemplateStoreTables() {
+    const statements = [
+      `CREATE TABLE IF NOT EXISTS \`UiTemplate\` (
+        \`id\` VARCHAR(191) NOT NULL,
+        \`slug\` VARCHAR(191) NOT NULL,
+        \`title\` VARCHAR(191) NOT NULL,
+        \`tagline\` VARCHAR(300) NOT NULL,
+        \`description\` TEXT NOT NULL,
+        \`thumbnail\` TEXT NULL,
+        \`promoVideoUrl\` TEXT NULL,
+        \`previewUrl\` TEXT NULL,
+        \`price\` DOUBLE NOT NULL,
+        \`currency\` VARCHAR(16) NOT NULL DEFAULT 'INR',
+        \`category\` VARCHAR(120) NOT NULL DEFAULT 'Website UI',
+        \`tags\` JSON NOT NULL,
+        \`filePath\` TEXT NULL,
+        \`fileName\` VARCHAR(255) NULL,
+        \`fileSize\` INT NULL,
+        \`deliveryUrl\` TEXT NULL,
+        \`downloadButtonText\` VARCHAR(80) NOT NULL DEFAULT 'Download files',
+        \`buyerMessage\` TEXT NULL,
+        \`isPublished\` BOOLEAN NOT NULL DEFAULT false,
+        \`isFeatured\` BOOLEAN NOT NULL DEFAULT false,
+        \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+        PRIMARY KEY (\`id\`),
+        UNIQUE INDEX \`UiTemplate_slug_key\` (\`slug\`),
+        INDEX \`UiTemplate_isPublished_createdAt_idx\` (\`isPublished\`, \`createdAt\`)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`UiTemplatePurchase\` (
+        \`id\` VARCHAR(191) NOT NULL,
+        \`userId\` VARCHAR(191) NOT NULL,
+        \`productId\` VARCHAR(191) NOT NULL,
+        \`amount\` DOUBLE NOT NULL,
+        \`currency\` VARCHAR(16) NOT NULL DEFAULT 'INR',
+        \`paymentId\` VARCHAR(191) NULL,
+        \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        PRIMARY KEY (\`id\`),
+        UNIQUE INDEX \`UiTemplatePurchase_userId_productId_key\` (\`userId\`, \`productId\`),
+        INDEX \`UiTemplatePurchase_createdAt_idx\` (\`createdAt\`)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+    ];
+
+    for (const statement of statements) {
+      await this.$executeRawUnsafe(statement);
+    }
+
+    const additions = [
+      'ADD COLUMN `promoVideoUrl` TEXT NULL AFTER `thumbnail`',
+      'ADD COLUMN `deliveryUrl` TEXT NULL',
+      "ADD COLUMN `downloadButtonText` VARCHAR(80) NOT NULL DEFAULT 'Download files'",
+      'ADD COLUMN `buyerMessage` TEXT NULL',
+    ];
+    for (const addition of additions) {
+      try {
+        await this.$executeRawUnsafe(`ALTER TABLE \`UiTemplate\` ${addition}`);
+      } catch (error: any) {
+        const databaseCode = String(error?.meta?.code || error?.code || '');
+        const message = String(error?.meta?.message || error?.message || '');
+        if (
+          databaseCode === '1060' ||
+          message.includes('Duplicate column name')
+        )
+          continue;
+        throw error;
+      }
     }
   }
 }

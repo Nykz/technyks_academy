@@ -1,6 +1,7 @@
-import { Logger } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import helmet from 'helmet';
 import {
   json,
   urlencoded,
@@ -32,12 +33,11 @@ function getWebDirectory() {
 }
 
 function validateProductionEnvironment() {
+  const isProduction = process.env.NODE_ENV === 'production';
   const databaseUrl = String(process.env.DATABASE_URL || '').trim();
   if (!databaseUrl) {
-    Logger.warn(
-      '[Startup] DATABASE_URL is not set. API will use high-performance in-memory persistence layer.',
-      'Bootstrap',
-    );
+    if (isProduction) throw new Error('DATABASE_URL is required in production.');
+    Logger.warn('[Startup] DATABASE_URL is not set. Development requires ALLOW_IN_MEMORY_FALLBACK=true.', 'Bootstrap');
   } else if (!/^mysql:\/\//i.test(databaseUrl)) {
     Logger.warn(
       '[Startup] DATABASE_URL does not use mysql:// protocol. Please verify database connection string.',
@@ -47,8 +47,9 @@ function validateProductionEnvironment() {
 
   const jwtSecret = String(process.env.JWT_SECRET || '').trim();
   if (jwtSecret.length < 32) {
+    if (isProduction) throw new Error('JWT_SECRET must contain at least 32 characters in production.');
     Logger.warn(
-      '[Startup] JWT_SECRET is missing or shorter than 32 characters. Using an ephemeral secure key; configure JWT_SECRET to keep sessions across restarts.',
+      '[Startup] JWT_SECRET is missing or shorter than 32 characters. Using an ephemeral development key.',
       'Bootstrap',
     );
     process.env.JWT_SECRET = randomBytes(48).toString('hex');
@@ -70,6 +71,34 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
   });
+
+  // Standard secure headers (HSTS, X-Content-Type-Options, X-Frame-Options,
+  // X-DNS-Prefetch-Control, etc.). Content-Security-Policy is intentionally
+  // left off here rather than guessed at: this app loads Google Fonts, an
+  // inline theme-detection script, Bunny/YouTube video iframes, and the
+  // Razorpay checkout script, so a CSP needs to be enumerated and tested
+  // against all of those before it can be turned on without breaking pages.
+  // Cross-Origin-Resource-Policy must allow cross-origin reads because the
+  // web app (courses.codingtechnyks.com) and this API (api.codingtechnyks.com)
+  // are different origins, and course/template thumbnails + uploaded videos
+  // served from here are loaded by <img>/<video> tags on that other origin.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  // Behind a reverse proxy/load balancer (Hostinger, nginx, a CDN) every
+  // request otherwise looks like it comes from the proxy's own IP, which
+  // would make the rate limiter (and any IP-based logging) treat every
+  // visitor as one caller. Trust exactly one hop so req.ip reflects the
+  // real client.
+  if (process.env.NODE_ENV === 'production') {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
+
   const uploadsDirectory = getUploadsDirectory();
   mkdirSync(uploadsDirectory, { recursive: true });
   app.useStaticAssets(uploadsDirectory, {
@@ -117,13 +146,41 @@ async function bootstrap() {
       'Bootstrap',
     );
   }
-  app.use(json({ limit: '16mb' }));
+  app.use(json({
+    limit: '16mb',
+    verify: (request: Request & { rawBody?: Buffer }, _response, buffer) => {
+      if (request.path === '/api/payments/webhook') request.rawBody = Buffer.from(buffer);
+    },
+  }));
   app.use(urlencoded({ extended: true, limit: '16mb' }));
+  const allowedOrigins = String(
+    process.env.CORS_ORIGINS || 'https://courses.codingtechnyks.com',
+  )
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: true,
+    origin:
+      process.env.NODE_ENV === 'production'
+        ? allowedOrigins
+        : true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
+
+  // Strip/reject unexpected request-body fields and coerce+validate typed
+  // ones on every DTO that carries class-validator decorators. Endpoints
+  // whose DTOs are still plain interfaces (no decorators) are unaffected —
+  // this is the first step of a broader move away from `@Body() dto: any`,
+  // not a rewrite of every controller in one pass.
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: false,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
 
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix, {

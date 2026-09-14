@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { Injectable, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -23,7 +24,7 @@ export class CouponsService implements OnModuleInit {
         }
         return;
       } catch {
-        // Use the local adapter below.
+        throw new ServiceUnavailableException('Your data could not be loaded or saved. Please retry shortly.');
       }
     }
 
@@ -40,9 +41,15 @@ export class CouponsService implements OnModuleInit {
   async validateCoupon(
     code: string,
     originalAmount: number,
-    context: { type: 'COURSE' | 'MEMBERSHIP'; courseId?: string; planId?: string } = {
+    context: {
+      type: 'COURSE' | 'MEMBERSHIP' | 'TEMPLATE';
+      courseId?: string;
+      planId?: string;
+      templateProductId?: string;
+    } = {
       type: 'COURSE',
     },
+    client?: any,
   ) {
     if (!code) {
       throw new BadRequestException('Coupon code is required.');
@@ -51,13 +58,13 @@ export class CouponsService implements OnModuleInit {
     let coupon: any = null;
     if (this.prisma.isDbConnected !== false) {
       try {
-        coupon = await this.prisma.coupon.findUnique({ where: { code: code.toUpperCase() } });
+        coupon = await (client || this.prisma).coupon.findUnique({ where: { code: code.trim().toUpperCase() } });
       } catch {
-        // Use the local adapter below.
+        throw new ServiceUnavailableException('Your data could not be loaded or saved. Please retry shortly.');
       }
     }
     if (!coupon) {
-      coupon = (this.prisma.inMemoryCoupons || []).find(item => item.code === code.toUpperCase());
+      coupon = (this.prisma.inMemoryCoupons || []).find(item => item.code === code.trim().toUpperCase());
     }
 
     if (!coupon || !coupon.isActive) {
@@ -65,26 +72,33 @@ export class CouponsService implements OnModuleInit {
     }
 
     const scope = String(coupon.scope || 'COURSE').toUpperCase();
-    const isAllowedScope =
-      scope === context.type &&
-      (scope !== 'COURSE' && scope !== 'MEMBERSHIP'
-        ? false
-        : scope === 'MEMBERSHIP'
-          ? context.type === 'MEMBERSHIP'
-          : Boolean(context.courseId) && coupon.courseId === context.courseId);
+    let isAllowedScope = scope === context.type;
+    if (isAllowedScope) {
+      if (scope === 'COURSE') {
+        isAllowedScope = Boolean(context.courseId) && coupon.courseId === context.courseId;
+      } else if (scope === 'TEMPLATE') {
+        isAllowedScope =
+          Boolean(context.templateProductId) &&
+          coupon.templateProductId === context.templateProductId;
+      } else if (scope !== 'MEMBERSHIP') {
+        isAllowedScope = false;
+      }
+    }
     if (!isAllowedScope) {
       throw new BadRequestException(
         context.type === 'MEMBERSHIP'
-          ? 'This coupon is locked to a course.'
-          : 'This coupon is locked to the membership program or another course.',
+          ? 'This coupon is locked to a course or template.'
+          : context.type === 'TEMPLATE'
+            ? 'This coupon is locked to a different product.'
+            : 'This coupon is locked to the membership program or another course.',
       );
     }
 
-    if (coupon.expiryDate && new Date() > coupon.expiryDate) {
+    if (coupon.expiryDate && Date.now() > new Date(coupon.expiryDate).getTime()) {
       throw new BadRequestException('This coupon code has expired.');
     }
 
-    if (coupon.usageLimit !== null && coupon.timesUsed >= coupon.usageLimit) {
+    if (coupon.usageLimit != null && coupon.timesUsed >= coupon.usageLimit) {
       throw new BadRequestException('This coupon usage limit has been reached.');
     }
 
@@ -104,8 +118,8 @@ export class CouponsService implements OnModuleInit {
       code: coupon.code,
       discountPercent: coupon.discountPercent,
       discountAmount: coupon.discountAmount,
-      calculatedDiscount: Math.round(discount),
-      finalAmount: Math.round(finalAmount),
+      calculatedDiscount: Math.round(discount * 100) / 100,
+      finalAmount: Math.round(finalAmount * 100) / 100,
     };
   }
 
@@ -118,7 +132,7 @@ export class CouponsService implements OnModuleInit {
         });
         return;
       } catch {
-        // Use the local adapter below.
+        throw new ServiceUnavailableException('Your data could not be loaded or saved. Please retry shortly.');
       }
     }
 

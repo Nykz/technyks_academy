@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
@@ -29,12 +30,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           where: { id: payload.sub },
         });
       } catch {
-        // Fall through to the local persistence adapter when the database
-        // becomes unavailable after the application has started.
+        throw new ServiceUnavailableException('Your data could not be loaded or saved. Please retry shortly.');
       }
     }
 
-    if (!user) {
+    if (!user && !this.prisma.isDbConnected) {
       user = this.prisma.inMemoryUsers.find(candidate => candidate.id === payload.sub);
     }
 

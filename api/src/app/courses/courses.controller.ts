@@ -15,6 +15,11 @@ export class CoursesController {
     return this.coursesService.findAllPublished();
   }
 
+  @Get('by-id/:id')
+  async getCourseById(@Param('id') id: string) {
+    return this.coursesService.findBySlug(id, true);
+  }
+
   @Get(':slug')
   async getCourseBySlug(@Param('slug') slug: string) {
     return this.coursesService.findBySlug(slug);

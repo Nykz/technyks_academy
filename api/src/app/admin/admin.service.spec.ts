@@ -109,6 +109,7 @@ describe('AdminService - course deletion', () => {
       create: vi.fn().mockResolvedValue(coupon),
       findUnique: vi.fn().mockResolvedValue(coupon),
       update: vi.fn().mockResolvedValue({ ...coupon, discountAmount: 600 }),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       delete: vi.fn().mockResolvedValue(coupon),
     };
 
@@ -118,6 +119,27 @@ describe('AdminService - course deletion', () => {
     expect(prisma.coupon.create).toHaveBeenCalledOnce();
     expect(prisma.coupon.update).toHaveBeenCalledOnce();
     expect(prisma.coupon.delete).toHaveBeenCalledOnce();
+  });
+
+  it('uses one stable coupon record for repeated course coupon saves', async () => {
+    const createdAt = new Date('2025-09-01T10:00:00Z');
+    prisma.course.findUnique = vi.fn().mockResolvedValue({ id: 'course_1' });
+    prisma.coupon = {
+      findFirst: vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 'course_coupon_course_1', code: 'OLD', courseId: 'course_1', scope: 'COURSE', isActive: true, timesUsed: 4, createdAt }),
+      upsert: vi.fn()
+        .mockResolvedValueOnce({ id: 'course_coupon_course_1', code: 'FIRST' })
+        .mockResolvedValueOnce({ id: 'course_coupon_course_1', code: 'UPDATED', timesUsed: 4, createdAt }),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    };
+
+    await service.saveCourseCoupon('course_1', { code: 'FIRST', discountAmount: 100, isActive: true });
+    const updated = await service.saveCourseCoupon('course_1', { code: 'UPDATED', discountAmount: 200, isActive: false });
+
+    expect(prisma.coupon.upsert).toHaveBeenNthCalledWith(1, expect.objectContaining({ where: { id: 'course_coupon_course_1' } }));
+    expect(prisma.coupon.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({ where: { id: 'course_coupon_course_1' } }));
+    expect(updated).toMatchObject({ id: 'course_coupon_course_1', timesUsed: 4, createdAt });
   });
 
   it('creates and deletes an unused membership plan in the database', async () => {

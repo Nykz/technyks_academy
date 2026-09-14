@@ -27,7 +27,8 @@ export interface MembershipPlan {
 }
 
 export interface OrderResponse {
-  provider: 'RAZORPAY' | 'LEMON_SQUEEZY';
+  provider: 'RAZORPAY' | 'LEMON_SQUEEZY' | 'FREE';
+  completed?: boolean;
   paymentId: string;
   razorpayOrderId?: string;
   razorpaySubscriptionId?: string;
@@ -50,11 +51,11 @@ export class PaymentsService {
     return this.http.get<MembershipPlan[]>('/api/payments/plans');
   }
 
-  validateCoupon(code: string, originalAmount: number, context: { type: 'COURSE' | 'MEMBERSHIP'; courseId?: string; planId?: string }): Observable<CouponValidationResult> {
+  validateCoupon(code: string, originalAmount: number, context: { type: 'COURSE' | 'MEMBERSHIP' | 'TEMPLATE'; courseId?: string; planId?: string; templateProductId?: string }): Observable<CouponValidationResult> {
     return this.http.post<CouponValidationResult>('/api/payments/coupon/validate', { code, originalAmount, ...context });
   }
 
-  createOrder(payload: { courseId?: string; planId?: string; couponCode?: string; provider?: string }): Observable<OrderResponse> {
+  createOrder(payload: { courseId?: string; planId?: string; templateProductIds?: string[]; couponCode?: string; provider?: string }): Observable<OrderResponse> {
     return this.http.post<OrderResponse>('/api/payments/create-order', payload);
   }
 

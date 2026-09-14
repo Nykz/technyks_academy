@@ -18,7 +18,8 @@
     "server": "node server.js",
     "prisma:generate": "node node_modules/prisma/build/index.js generate",
     "prisma:db:push": "node node_modules/prisma/build/index.js db push",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "import:bunny-course": "node scripts/import-bunny-course.cjs"
   },
   "private": true,
   "devDependencies": {
@@ -81,10 +82,14 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/throttler": "^6.4.0",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
     "express": "^4.21.2",
     "google-auth-library": "^11.0.2",
+    "helmet": "^8.1.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.0",

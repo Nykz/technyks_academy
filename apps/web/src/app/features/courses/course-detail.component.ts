@@ -7,11 +7,12 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { CoursesService, Course } from '../../core/services/courses.service';
 import { AuthService } from '../../core/services/auth.service';
 import { EnrollmentsService } from '../../core/services/enrollments.service';
+import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 
 @Component({
   selector: 'app-course-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, MediaUrlPipe],
   template: `
     @if (isLoading()) {
       <div class="min-h-[70vh] flex items-center justify-center">
@@ -112,7 +113,7 @@ import { EnrollmentsService } from '../../core/services/enrollments.service';
                 @if (!promoPlaying()) {
                   @if (course()?.thumbnail) {
                     <img
-                      [src]="course()?.thumbnail"
+                      [src]="course()?.thumbnail | mediaUrl"
                       [alt]="course()?.title"
                       class="w-full h-full object-contain transition-transform duration-500 group-hover:scale-[1.02]"
                     />
@@ -148,7 +149,7 @@ import { EnrollmentsService } from '../../core/services/enrollments.service';
                   }
                 } @else if (isUploadedPromoVideo(course()?.promoVideoUrl)) {
                   <video
-                    [src]="course()?.promoVideoUrl"
+                    [src]="course()?.promoVideoUrl | mediaUrl"
                     controls
                     autoplay
                     playsinline
@@ -168,7 +169,7 @@ import { EnrollmentsService } from '../../core/services/enrollments.service';
               <div
                 class="font-['JetBrains_Mono'] text-xs text-[#2563EB] dark:text-[#3B82F6] uppercase tracking-widest font-bold"
               >
-                // COURSE ACCESS
+                COURSE ACCESS
               </div>
 
               @if (isEnrolled()) {
@@ -182,104 +183,123 @@ import { EnrollmentsService } from '../../core/services/enrollments.service';
                 </div>
               }
 
-              <div class="flex items-baseline justify-between gap-4">
-                @if (isEnrolled()) {
-                  <span
-                    class="font-['JetBrains_Mono'] text-2xl font-bold text-[#2563EB] dark:text-[#60A5FA]"
-                    >OWNED</span
-                  >
-                  <span
-                    class="font-['JetBrains_Mono'] text-[10px] text-emerald-700 dark:text-emerald-300 font-bold text-right uppercase"
-                    >Saved to your account</span
-                  >
-                } @else if (course()?.isFree) {
-                  <span
-                    class="font-['JetBrains_Mono'] text-3xl font-bold text-[#2563EB] dark:text-[#3B82F6]"
-                    >FREE</span
-                  >
-                  <span
-                    class="font-['JetBrains_Mono'] text-xs text-[#2563EB] dark:text-[#3B82F6] font-semibold text-right"
-                    >LOGGED-IN STUDENTS ONLY</span
-                  >
-                } @else {
-                  <span
-                    class="font-['JetBrains_Mono'] text-3xl font-bold text-slate-900 dark:text-white"
-                    >₹{{ course()?.price?.toLocaleString('en-IN') }}</span
-                  >
-                  <span
-                    class="font-['JetBrains_Mono'] text-xs text-[#2563EB] dark:text-[#3B82F6] font-semibold"
-                    >ONE-TIME OR MEMBERSHIP</span
-                  >
-                }
-              </div>
-
-              @if (isEnrolled()) {
-                <a
-                  [routerLink]="[
-                    '/courses',
-                    course()?.slug,
-                    'watch',
-                    getCourseEntryLessonId(),
-                  ]"
-                  class="w-full text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider font-bold !text-white bg-[#2563EB] hover:bg-[#1D4ED8] py-4 rounded-lg transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+              @if (checkingEnrollment()) {
+                <p
+                  role="status"
+                  class="text-sm text-slate-700 dark:text-slate-300"
                 >
-                  <span>Go to course</span>
-                  <span class="material-symbols-outlined text-sm !text-white"
-                    >play_arrow</span
-                  >
-                </a>
-              } @else if (course()?.isFree) {
+                  Checking your course access…
+                </p>
+              } @else if (enrollmentCheckError()) {
+                <p role="alert" class="text-sm text-red-700 dark:text-red-300">
+                  {{ enrollmentCheckError() }}
+                </p>
                 <button
                   type="button"
-                  (click)="enrollInFreeCourse()"
-                  [disabled]="isEnrolling()"
-                  class="w-full text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider font-bold !text-white bg-[#2563EB] hover:bg-[#1D4ED8] py-4 rounded-lg transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg disabled:opacity-60"
+                  (click)="retryEnrollmentCheck()"
+                  class="text-blue-700 dark:text-blue-300 underline"
                 >
-                  <span>{{
-                    isEnrolling() ? 'Enrolling...' : 'Enroll for free'
-                  }}</span>
-                  <span class="material-symbols-outlined text-sm !text-white"
-                    >arrow_forward</span
-                  >
+                  Retry access check
                 </button>
-                @if (enrollmentMessage()) {
-                  <p
-                    class="font-['Inter'] text-xs text-slate-600 dark:text-[#d9c3af] text-center"
-                  >
-                    {{ enrollmentMessage() }}
-                  </p>
-                }
               } @else {
-                <a
-                  [routerLink]="['/checkout']"
-                  [queryParams]="{
-                    courseId: course()?.id,
-                    slug: course()?.slug,
-                  }"
-                  class="w-full text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider font-bold !text-white bg-[#2563EB] hover:bg-[#1D4ED8] py-4 rounded-lg transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
-                >
-                  <span class="!text-white font-bold"
-                    >Enroll in Course Now</span
-                  >
-                  <span class="material-symbols-outlined text-sm !text-white"
-                    >arrow_forward</span
-                  >
-                </a>
-              }
+                <div class="flex items-baseline justify-between gap-4">
+                  @if (isEnrolled()) {
+                    <span
+                      class="font-['JetBrains_Mono'] text-2xl font-bold text-[#2563EB] dark:text-[#60A5FA]"
+                      >OWNED</span
+                    >
+                    <span
+                      class="font-['JetBrains_Mono'] text-[10px] text-emerald-700 dark:text-emerald-300 font-bold text-right uppercase"
+                      >Saved to your account</span
+                    >
+                  } @else if (course()?.isFree) {
+                    <span
+                      class="font-['JetBrains_Mono'] text-3xl font-bold text-[#2563EB] dark:text-[#3B82F6]"
+                      >FREE</span
+                    >
+                    <span
+                      class="font-['JetBrains_Mono'] text-xs text-[#2563EB] dark:text-[#3B82F6] font-semibold text-right"
+                      >LOGGED-IN STUDENTS ONLY</span
+                    >
+                  } @else {
+                    <span
+                      class="font-['JetBrains_Mono'] text-3xl font-bold text-slate-900 dark:text-white"
+                      >₹{{ course()?.price?.toLocaleString('en-IN') }}</span
+                    >
+                    <span
+                      class="font-['JetBrains_Mono'] text-xs text-[#2563EB] dark:text-[#3B82F6] font-semibold"
+                      >ONE-TIME OR MEMBERSHIP</span
+                    >
+                  }
+                </div>
 
-              @if (!isEnrolled()) {
-                <a
-                  routerLink="/membership"
-                  class="w-full text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider font-bold bg-white hover:bg-slate-100 text-slate-800 hover:text-[#2563EB] border-2 border-slate-300 hover:border-[#2563EB] dark:bg-transparent dark:hover:bg-[#3B82F6]/10 dark:text-[#60A5FA] dark:border-[#3B82F6]/50 dark:hover:border-[#3B82F6] py-3.5 rounded-lg transition-all shadow-sm flex items-center justify-center gap-2"
-                >
-                  <span
-                    class="material-symbols-outlined text-base text-[#2563EB] dark:text-[#3B82F6]"
-                    >workspace_premium</span
+                @if (isEnrolled()) {
+                  <a
+                    [routerLink]="[
+                      '/courses',
+                      course()?.slug,
+                      'watch',
+                      getCourseEntryLessonId(),
+                    ]"
+                    class="w-full text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider font-bold !text-white bg-[#2563EB] hover:bg-[#1D4ED8] py-4 rounded-lg transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                   >
-                  <span>Get All Courses with Membership</span>
-                </a>
-              }
+                    <span>Go to course</span>
+                    <span class="material-symbols-outlined text-sm !text-white"
+                      >play_arrow</span
+                    >
+                  </a>
+                } @else if (course()?.isFree) {
+                  <button
+                    type="button"
+                    (click)="enrollInFreeCourse()"
+                    [disabled]="isEnrolling()"
+                    class="w-full text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider font-bold !text-white bg-[#2563EB] hover:bg-[#1D4ED8] py-4 rounded-lg transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg disabled:opacity-60"
+                  >
+                    <span>{{
+                      isEnrolling() ? 'Enrolling...' : 'Enroll for free'
+                    }}</span>
+                    <span class="material-symbols-outlined text-sm !text-white"
+                      >arrow_forward</span
+                    >
+                  </button>
+                  @if (enrollmentMessage()) {
+                    <p
+                      class="font-['Inter'] text-xs text-slate-600 dark:text-[#d9c3af] text-center"
+                    >
+                      {{ enrollmentMessage() }}
+                    </p>
+                  }
+                } @else {
+                  <a
+                    [routerLink]="['/checkout']"
+                    [queryParams]="{
+                      courseId: course()?.id,
+                      slug: course()?.slug,
+                    }"
+                    class="w-full text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider font-bold !text-white bg-[#2563EB] hover:bg-[#1D4ED8] py-4 rounded-lg transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+                  >
+                    <span class="!text-white font-bold"
+                      >Enroll in Course Now</span
+                    >
+                    <span class="material-symbols-outlined text-sm !text-white"
+                      >arrow_forward</span
+                    >
+                  </a>
+                }
 
+                @if (!isEnrolled()) {
+                  <a
+                    routerLink="/membership"
+                    class="w-full text-center font-['JetBrains_Mono'] text-xs uppercase tracking-wider font-bold bg-white hover:bg-slate-100 text-slate-800 hover:text-[#2563EB] border-2 border-slate-300 hover:border-[#2563EB] dark:bg-transparent dark:hover:bg-[#3B82F6]/10 dark:text-[#60A5FA] dark:border-[#3B82F6]/50 dark:hover:border-[#3B82F6] py-3.5 rounded-lg transition-all shadow-sm flex items-center justify-center gap-2"
+                  >
+                    <span
+                      class="material-symbols-outlined text-base text-[#2563EB] dark:text-[#3B82F6]"
+                      >workspace_premium</span
+                    >
+                    <span>Get All Courses with Membership</span>
+                  </a>
+                }
+              }
               <div class="border-t border-slate-200 pt-4 dark:border-[#26334B]">
                 <h3
                   class="mb-3 font-['Hanken_Grotesk'] text-sm font-bold text-slate-900 dark:text-white"
@@ -456,7 +476,7 @@ import { EnrollmentsService } from '../../core/services/enrollments.service';
                   <h3
                     class="font-['JetBrains_Mono'] text-xs uppercase text-[#2563EB] dark:text-[#3B82F6] tracking-wider font-bold mb-4"
                   >
-                    // THIS COURSE INCLUDES
+                    THIS COURSE INCLUDES
                   </h3>
                   <div class="flex items-center gap-4 mb-4">
                     <div
@@ -695,6 +715,8 @@ export class CourseDetailComponent implements OnInit {
   promoEmbedUrl = signal<SafeResourceUrl | null>(null);
   promoPlaying = signal(false);
   isEnrolled = signal(false);
+  checkingEnrollment = signal(false);
+  enrollmentCheckError = signal('');
   resumeLessonId = signal('');
   isEnrolling = signal(false);
   enrollmentMessage = signal('');
@@ -708,8 +730,15 @@ export class CourseDetailComponent implements OnInit {
     this.route.params.subscribe((params) => {
       const slug = params['slug'];
       if (slug) {
+        this.isLoading.set(true);
+        this.course.set(null);
+        this.isEnrolled.set(false);
+        this.resumeLessonId.set('');
+        this.enrollmentMessage.set('');
+        this.enrollmentCheckError.set('');
         this.coursesService.getCourseBySlug(slug).subscribe({
           next: (data) => {
+            if (this.route.snapshot.paramMap.get('slug') !== slug) return;
             this.course.set(data);
             this.loadEnrollmentStatus(data);
             this.promoPlaying.set(false);
@@ -734,14 +763,13 @@ export class CourseDetailComponent implements OnInit {
 
   private loadEnrollmentStatus(course: Course) {
     if (!this.authService.isAuthenticated()) return;
-    this.enrollmentsService.getMyEnrollments().subscribe({
-      next: (enrollments) => {
-        const enrollment = enrollments.find(
-          (candidate) =>
-            candidate.courseId === course.id ||
-            candidate.course?.slug === course.slug,
-        );
-        this.isEnrolled.set(Boolean(enrollment));
+    this.checkingEnrollment.set(true);
+    this.enrollmentCheckError.set('');
+    this.enrollmentsService.getCourseAccess(course.id).subscribe({
+      next: ({ enrolled, enrollment }) => {
+        if (this.course()?.id !== course.id) return;
+        this.checkingEnrollment.set(false);
+        this.isEnrolled.set(enrolled);
         if (enrollment?.lastWatchedLessonId) {
           const lessonStillExists = course.modules?.some((module) =>
             module.lessons?.some(
@@ -755,8 +783,19 @@ export class CourseDetailComponent implements OnInit {
           this.resumeLessonId.set('');
         }
       },
-      error: () => this.isEnrolled.set(false),
+      error: () => {
+        if (this.course()?.id !== course.id) return;
+        this.checkingEnrollment.set(false);
+        this.enrollmentCheckError.set(
+          'We could not verify your enrollment. Please retry; you do not need to buy the course again.',
+        );
+      },
     });
+  }
+
+  retryEnrollmentCheck() {
+    const course = this.course();
+    if (course) this.loadEnrollmentStatus(course);
   }
 
   getFirstLessonId(): string {

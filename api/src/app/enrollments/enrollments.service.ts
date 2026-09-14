@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ServiceUnavailableException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -14,7 +19,17 @@ export class EnrollmentsService {
             course: {
               include: {
                 modules: {
-                  include: { lessons: { select: { id: true, title: true, duration: true, order: true, isFreePreview: true } } },
+                  include: {
+                    lessons: {
+                      select: {
+                        id: true,
+                        title: true,
+                        duration: true,
+                        order: true,
+                        isFreePreview: true,
+                      },
+                    },
+                  },
                   orderBy: { order: 'asc' },
                 },
               },
@@ -23,41 +38,94 @@ export class EnrollmentsService {
           orderBy: { updatedAt: 'desc' },
         });
       } catch {
-        // Use the local adapter below.
+        throw new ServiceUnavailableException(
+          'Your data could not be loaded or saved. Please retry shortly.',
+        );
       }
     }
 
     return this.prisma.inMemoryEnrollments
-      .filter(enrollment => enrollment.userId === userId)
-      .map(enrollment => ({
+      .filter((enrollment) => enrollment.userId === userId)
+      .map((enrollment) => ({
         ...enrollment,
-        course: enrollment.course || this.prisma.inMemoryCourses.find(course => course.id === enrollment.courseId),
+        course:
+          enrollment.course ||
+          this.prisma.inMemoryCourses.find(
+            (course) => course.id === enrollment.courseId,
+          ),
       }))
-      .filter(enrollment => enrollment.course);
+      .filter((enrollment) => enrollment.course);
+  }
+
+  async getCourseAccess(userId: string, courseId: string) {
+    let enrollment: any = null;
+    if (this.prisma.isDbConnected) {
+      try {
+        enrollment = await this.prisma.enrollment.findUnique({
+          where: { userId_courseId: { userId, courseId } },
+        });
+      } catch {
+        throw new ServiceUnavailableException(
+          'Your course access could not be verified. Please retry shortly.',
+        );
+      }
+    } else {
+      enrollment = this.prisma.inMemoryEnrollments.find(
+        (item) => item.userId === userId && item.courseId === courseId,
+      );
+    }
+
+    return {
+      enrolled: Boolean(enrollment),
+      enrollment: enrollment || null,
+    };
   }
 
   async enrollInFreeCourse(userId: string, courseId: string) {
+    // Ownership is permanent and is checked before today's course price.
+    const owned = this.prisma.isDbConnected
+      ? await this.prisma.enrollment.findUnique({
+          where: { userId_courseId: { userId, courseId } },
+        })
+      : this.prisma.inMemoryEnrollments.find(
+          (item) => item.userId === userId && item.courseId === courseId,
+        );
+    if (owned) return owned;
     let course: any = null;
 
     if (this.prisma.isDbConnected) {
       try {
         course = await this.prisma.course.findUnique({
           where: { id: courseId },
-          select: { id: true, isFree: true, price: true },
+          select: {
+            id: true,
+            isFree: true,
+            price: true,
+            isPublished: true,
+            isArchived: true,
+          },
         });
       } catch {
-        // Use the local adapter below.
+        throw new ServiceUnavailableException(
+          'Your data could not be loaded or saved. Please retry shortly.',
+        );
       }
     }
 
     course ??= this.prisma.inMemoryCourses.find(
-      candidate => candidate.id === courseId || candidate.slug === courseId,
+      (candidate) => candidate.id === courseId || candidate.slug === courseId,
     );
     if (!course) throw new NotFoundException('Course not found.');
+    if (course.isArchived || course.isPublished === false)
+      throw new NotFoundException(
+        'Course is not available for new enrollments.',
+      );
 
-    const isFree = Boolean(course.isFree ?? Number(course.price || 0) === 0);
+    const isFree = course.isFree === true || Number(course.price) === 0;
     if (!isFree) {
-      throw new ForbiddenException('This course requires payment before enrollment.');
+      throw new ForbiddenException(
+        'This course requires payment before enrollment.',
+      );
     }
 
     if (this.prisma.isDbConnected) {
@@ -73,12 +141,14 @@ export class EnrollmentsService {
           update: {},
         });
       } catch {
-        // Use the local adapter below.
+        throw new ServiceUnavailableException(
+          'Your data could not be loaded or saved. Please retry shortly.',
+        );
       }
     }
 
     const existing = this.prisma.inMemoryEnrollments.find(
-      enrollment =>
+      (enrollment) =>
         enrollment.userId === userId && enrollment.courseId === course.id,
     );
     if (existing) return existing;
@@ -97,7 +167,10 @@ export class EnrollmentsService {
     return enrollment;
   }
 
-  async updateProgress(userId: string, dto: { courseId: string; lessonId: string; isCompleted?: boolean }) {
+  async updateProgress(
+    userId: string,
+    dto: { courseId: string; lessonId: string; isCompleted?: boolean },
+  ) {
     let enrollment: any = null;
     let course: any = null;
     let usingDatabase = false;
@@ -113,29 +186,57 @@ export class EnrollmentsService {
         });
         usingDatabase = Boolean(course);
       } catch {
-        // Use the local adapter below.
+        throw new ServiceUnavailableException(
+          'Your data could not be loaded or saved. Please retry shortly.',
+        );
       }
     }
 
-    course ??= this.prisma.inMemoryCourses.find(candidate => candidate.id === dto.courseId || candidate.slug === dto.courseId);
+    course ??= this.prisma.inMemoryCourses.find(
+      (candidate) =>
+        candidate.id === dto.courseId || candidate.slug === dto.courseId,
+    );
     if (!course) throw new NotFoundException('Course not found.');
 
     if (!enrollment) {
       enrollment = this.prisma.inMemoryEnrollments.find(
-        item => item.userId === userId && item.courseId === course.id,
+        (item) => item.userId === userId && item.courseId === course.id,
       );
     }
-    if (!enrollment) throw new ForbiddenException('You must enroll in this course before saving progress.');
+    if (!enrollment)
+      throw new ForbiddenException(
+        'You must enroll in this course before saving progress.',
+      );
 
     const totalLessonsCount = (course.modules || []).reduce(
       (total: number, module: any) => total + (module.lessons?.length || 0),
       0,
     );
-    const completed = [...(enrollment.completedLessonIds || [])];
-    if (dto.isCompleted && !completed.includes(dto.lessonId)) completed.push(dto.lessonId);
-    const progressPercent = totalLessonsCount > 0
-      ? Math.min(100, Math.round((completed.length / totalLessonsCount) * 100))
-      : 0;
+    const lessonIds = new Set(
+      (course.modules || []).flatMap((module: any) =>
+        (module.lessons || []).map((lesson: any) => lesson.id),
+      ),
+    );
+    if (!lessonIds.has(dto.lessonId))
+      throw new NotFoundException('Lesson does not belong to this course.');
+    const completed = [
+      ...new Set<string>(
+        (enrollment.completedLessonIds || []).filter(
+          (id: string) =>
+            lessonIds.has(id) &&
+            (dto.isCompleted !== false || id !== dto.lessonId),
+        ),
+      ),
+    ];
+    if (dto.isCompleted && !completed.includes(dto.lessonId))
+      completed.push(dto.lessonId);
+    const progressPercent =
+      totalLessonsCount > 0
+        ? Math.min(
+            100,
+            Math.round((completed.length / totalLessonsCount) * 100),
+          )
+        : 0;
 
     const updateData = {
       lastWatchedLessonId: dto.lessonId,
@@ -153,20 +254,25 @@ export class EnrollmentsService {
         });
         updated = { ...enrollment, ...updateData, ...(saved || {}), course };
       } catch {
-        // Keep the local representation if the database becomes unavailable.
+        throw new ServiceUnavailableException(
+          'Your data could not be loaded or saved. Please retry shortly.',
+        );
       }
     } else {
       Object.assign(enrollment, updateData, { course });
     }
 
-    if (progressPercent === 100) await this.generateCertificateIfEligible(userId, course.id);
+    if (progressPercent === 100)
+      await this.generateCertificateIfEligible(userId, course.id);
     return updated;
   }
 
   async generateCertificateIfEligible(userId: string, courseId: string) {
     if (this.prisma.isDbConnected) {
       try {
-        const existing = await this.prisma.certificate.findUnique({ where: { userId_courseId: { userId, courseId } } });
+        const existing = await this.prisma.certificate.findUnique({
+          where: { userId_courseId: { userId, courseId } },
+        });
         if (existing) return existing;
 
         const certificateNumber = this.createCertificateNumber();
@@ -179,11 +285,16 @@ export class EnrollmentsService {
           },
         });
       } catch {
-        // Use the local adapter below.
+        throw new ServiceUnavailableException(
+          'Your data could not be loaded or saved. Please retry shortly.',
+        );
       }
     }
 
-    const existingMem = this.prisma.inMemoryCertificates.find(certificate => certificate.userId === userId && certificate.courseId === courseId);
+    const existingMem = this.prisma.inMemoryCertificates.find(
+      (certificate) =>
+        certificate.userId === userId && certificate.courseId === courseId,
+    );
     if (existingMem) return existingMem;
 
     const certificateNumber = this.createCertificateNumber();

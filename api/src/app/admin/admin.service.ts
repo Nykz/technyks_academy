@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import {
   BadRequestException,
   Injectable,
@@ -196,7 +197,7 @@ export class AdminService {
         });
         return this.withCourseMetrics(courses);
       } catch {
-        // Use the local adapter if the database becomes unavailable.
+        throw new ServiceUnavailableException('Your data could not be loaded or saved. Please retry shortly.');
       }
     }
 
@@ -320,7 +321,7 @@ export class AdminService {
           orderBy: { price: 'asc' },
         });
       } catch {
-        // Use the local adapter below.
+        throw new ServiceUnavailableException('Your data could not be loaded or saved. Please retry shortly.');
       }
     }
     return [...(this.prisma.inMemoryMembershipPlans || [])].sort(
@@ -673,15 +674,75 @@ export class AdminService {
     return coupon;
   }
 
+  async getCourseCoupon(courseId: string) {
+    if (this.prisma.isDbConnected) {
+      return this.prisma.coupon.findFirst({
+        where: { courseId, scope: 'COURSE' },
+        orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      });
+    }
+    return this.prisma.inMemoryCoupons.filter(c => c.courseId === courseId && c.scope === 'COURSE')
+      .sort((a, b) => Number(Boolean(b.isActive)) - Number(Boolean(a.isActive)) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || b.id.localeCompare(a.id))[0] || null;
+  }
+
+  async saveCourseCoupon(courseId: string, dto: any) {
+    const course = this.prisma.isDbConnected
+      ? await this.prisma.course.findUnique({ where: { id: courseId }, select: { id: true } })
+      : this.prisma.inMemoryCourses.find(c => c.id === courseId);
+    if (!course) throw new NotFoundException('Course not found.');
+    const current = await this.getCourseCoupon(courseId);
+    const data = this.normaliseCoupon({ ...dto, scope: 'COURSE', courseId }, current);
+    // Stable ID makes repeated/concurrent first saves address the same record.
+    const id = current?.id || `course_coupon_${courseId}`;
+    if (this.prisma.isDbConnected) {
+      try {
+        return await this.prisma.$transaction(async (database) => {
+          const saved = await database.coupon.upsert({
+            where: { id }, create: { id, ...data, timesUsed: 0 } as any, update: data as any,
+          });
+          await database.coupon.updateMany({
+            where: { courseId, scope: 'COURSE', id: { not: id } },
+            data: { isActive: false },
+          });
+          return saved;
+        });
+      } catch (error: any) {
+        if (error?.code === 'P2002') throw new BadRequestException('This coupon code is already used by another coupon.');
+        throw new ServiceUnavailableException('Coupon was not saved. Please retry.');
+      }
+    }
+    if (this.prisma.inMemoryCoupons.some(c => c.id !== id && c.code === data.code)) throw new BadRequestException('This coupon code is already used by another coupon.');
+    this.prisma.inMemoryCoupons
+      .filter(c => c.id !== id && c.courseId === courseId && c.scope === 'COURSE')
+      .forEach(c => { c.isActive = false; c.updatedAt = new Date(); });
+    if (current) { Object.assign(current, data, { updatedAt: new Date() }); return current; }
+    const coupon = { id, ...data, timesUsed: 0, createdAt: new Date(), updatedAt: new Date() };
+    this.prisma.inMemoryCoupons.unshift(coupon);
+    return coupon;
+  }
+
   async updateCoupon(id: string, dto: any) {
     if (this.prisma.isDbConnected) {
       const current = await this.prisma.coupon.findUnique({ where: { id } });
       if (!current) throw new NotFoundException('Coupon not found.');
       const data = this.normaliseCoupon(dto, current);
       try {
-        return await this.prisma.coupon.update({
-          where: { id },
-          data: data as any,
+        return await this.prisma.$transaction(async (database) => {
+          const updated = await database.coupon.update({
+            where: { id },
+            data: data as any,
+          });
+          if (updated.scope === 'COURSE' && updated.courseId && updated.isActive) {
+            await database.coupon.updateMany({
+              where: {
+                courseId: updated.courseId,
+                scope: 'COURSE',
+                id: { not: updated.id },
+              },
+              data: { isActive: false },
+            });
+          }
+          return updated;
         });
       } catch (error: any) {
         if (error?.code === 'P2002')
@@ -696,6 +757,11 @@ export class AdminService {
     Object.assign(coupon, this.normaliseCoupon(dto, coupon), {
       updatedAt: new Date(),
     });
+    if (coupon.scope === 'COURSE' && coupon.courseId && coupon.isActive) {
+      this.prisma.inMemoryCoupons
+        .filter(candidate => candidate.id !== id && candidate.courseId === coupon.courseId && candidate.scope === 'COURSE')
+        .forEach(candidate => { candidate.isActive = false; candidate.updatedAt = new Date(); });
+    }
     return coupon;
   }
 
@@ -706,7 +772,7 @@ export class AdminService {
           orderBy: { createdAt: 'desc' },
         });
       } catch {
-        // Use the local adapter if the database becomes unavailable.
+        throw new ServiceUnavailableException('Your data could not be loaded or saved. Please retry shortly.');
       }
     }
 
@@ -744,7 +810,7 @@ export class AdminService {
           orderBy: { createdAt: 'desc' },
         });
       } catch {
-        // Use the local adapter if the database becomes unavailable.
+        throw new ServiceUnavailableException('Your data could not be loaded or saved. Please retry shortly.');
       }
     }
 
@@ -871,8 +937,8 @@ export class AdminService {
       .trim()
       .toUpperCase();
     if (!code) throw new BadRequestException('Coupon code is required.');
-    const percentValue = dto.discountPercent ?? current?.discountPercent;
-    const amountValue = dto.discountAmount ?? current?.discountAmount;
+    const percentValue = dto.discountPercent !== undefined ? dto.discountPercent : current?.discountPercent;
+    const amountValue = dto.discountAmount !== undefined ? dto.discountAmount : current?.discountAmount;
     const discountPercent =
       percentValue === null || percentValue === '' || percentValue === undefined
         ? null
@@ -883,6 +949,7 @@ export class AdminService {
         : Number(amountValue);
     if (discountPercent === null && discountAmount === null)
       throw new BadRequestException('Enter a percentage or fixed discount.');
+    if (discountPercent !== null && discountAmount !== null) throw new BadRequestException('Choose either a percentage or a fixed discount.');
     if (
       discountPercent !== null &&
       (!Number.isFinite(discountPercent) ||
@@ -899,15 +966,21 @@ export class AdminService {
       throw new BadRequestException(
         'Fixed discount must be greater than zero.',
       );
+    const requestedScope = String(dto.scope ?? current?.scope ?? 'COURSE').toUpperCase();
     const scope =
-      String(dto.scope ?? current?.scope ?? 'COURSE').toUpperCase() ===
-      'MEMBERSHIP'
+      requestedScope === 'MEMBERSHIP'
         ? 'MEMBERSHIP'
-        : 'COURSE';
+        : requestedScope === 'TEMPLATE'
+          ? 'TEMPLATE'
+          : 'COURSE';
     const courseId =
       dto.courseId !== undefined
         ? dto.courseId || null
         : current?.courseId || null;
+    const templateProductId =
+      dto.templateProductId !== undefined
+        ? dto.templateProductId || null
+        : current?.templateProductId || null;
     if (scope === 'COURSE' && !courseId)
       throw new BadRequestException(
         'Course coupons must be locked to a course.',
@@ -916,17 +989,23 @@ export class AdminService {
       throw new BadRequestException(
         'Membership coupons cannot be attached to a course.',
       );
-    const usageValue = dto.usageLimit ?? current?.usageLimit;
+    if (scope === 'TEMPLATE' && !templateProductId)
+      throw new BadRequestException(
+        'Template coupons must be locked to a UI template product.',
+      );
+    const usageValue = dto.usageLimit !== undefined ? dto.usageLimit : current?.usageLimit;
     const usageLimit =
       usageValue === null || usageValue === '' || usageValue === undefined
         ? null
-        : Math.max(1, Number(usageValue));
+        : Number(usageValue);
+    if (usageLimit !== null && (!Number.isInteger(usageLimit) || usageLimit < 1)) throw new BadRequestException('Usage limit must be a positive whole number.');
     return {
       code,
       discountPercent,
       discountAmount,
       scope,
-      courseId,
+      courseId: scope === 'COURSE' ? courseId : null,
+      templateProductId: scope === 'TEMPLATE' ? templateProductId : null,
       usageLimit,
       isActive: dto.isActive ?? current?.isActive ?? true,
     };
@@ -1170,7 +1249,12 @@ export class AdminService {
         'Promotional video files must be 8 MB or smaller.',
       );
     }
-    if (url.startsWith('data:video/')) return url;
+    // Uploaded files are stored server-side and referenced by the relative
+    // /uploads/... path returned by MediaService — accept that the same way
+    // cleanThumbnail() already does, so a locally-uploaded intro video can
+    // actually be saved (previously only data: URIs and absolute http(s)
+    // links were accepted here, which silently rejected every file upload).
+    if (url.startsWith('data:video/') || url.startsWith('/')) return url;
     try {
       const parsed = new URL(url);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {

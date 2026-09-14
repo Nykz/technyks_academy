@@ -45,6 +45,15 @@ export interface CourseAnnouncement {
   updatedAt?: string;
 }
 
+export interface EmailConfiguration {
+  provider: string;
+  configured: boolean;
+  from: string | null;
+  replyTo: string | null;
+  sendingDomain: string | null;
+  requirements: string[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class CommunicationService {
   private http = inject(HttpClient);
@@ -121,6 +130,12 @@ export class CommunicationService {
   getAdminAnnouncements() {
     return this.http.get<CourseAnnouncement[]>(
       '/api/admin/communication/announcements',
+    );
+  }
+
+  getEmailConfiguration() {
+    return this.http.get<EmailConfiguration>(
+      '/api/admin/communication/email-configuration',
     );
   }
 

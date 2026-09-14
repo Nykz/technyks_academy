@@ -299,6 +299,12 @@ export class CoursesService {
     );
   }
 
+  getPublicCourseById(id: string): Observable<Course> {
+    return this.http.get<Course>(`/api/courses/by-id/${encodeURIComponent(id)}`).pipe(
+      map(course => this.normaliseCourse(course)),
+    );
+  }
+
   getCourseById(id: string): Observable<Course> {
     const fallback = () => {
       const found = this.getStoredCourses().find((course) => course.id === id);

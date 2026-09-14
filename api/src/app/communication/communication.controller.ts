@@ -105,6 +105,11 @@ export class AdminCommunicationController {
     return this.communicationService.listAnnouncementsForAdmin();
   }
 
+  @Get('email-configuration')
+  getEmailConfiguration() {
+    return this.communicationService.getEmailConfiguration();
+  }
+
   @Post('announcements')
   createAnnouncement(
     @Request() req: any,

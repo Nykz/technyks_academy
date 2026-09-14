@@ -151,10 +151,10 @@ import {
 
                   @if (showQuestionComposer()) {
                     <div class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900 dark:bg-blue-950/30 sm:p-5">
-                      <label class="block font-['JetBrains_Mono'] text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300">Question title</label>
-                      <input [(ngModel)]="newQuestionTitle" maxlength="240" placeholder="What do you need help understanding?" class="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-950 outline-none focus:border-[#2563EB] dark:border-[#334155] dark:bg-[#0B111D] dark:text-white" />
-                      <label class="mt-4 block font-['JetBrains_Mono'] text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300">Details</label>
-                      <textarea [(ngModel)]="newQuestionBody" maxlength="4000" rows="4" placeholder="Describe the problem, what you tried, and what you expected." class="mt-2 w-full resize-y rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-950 outline-none focus:border-[#2563EB] dark:border-[#334155] dark:bg-[#0B111D] dark:text-white"></textarea>
+                      <label for="question-title" class="block font-['JetBrains_Mono'] text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300">Question title</label>
+                      <input id="question-title" [(ngModel)]="newQuestionTitle" maxlength="240" placeholder="What do you need help understanding?" class="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-950 outline-none focus:border-[#2563EB] dark:border-[#334155] dark:bg-[#0B111D] dark:text-white" />
+                      <label for="question-details" class="mt-4 block font-['JetBrains_Mono'] text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300">Details</label>
+                      <textarea id="question-details" [(ngModel)]="newQuestionBody" maxlength="4000" rows="4" placeholder="Describe the problem, what you tried, and what you expected." class="mt-2 w-full resize-y rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-950 outline-none focus:border-[#2563EB] dark:border-[#334155] dark:bg-[#0B111D] dark:text-white"></textarea>
                       <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
                         <label class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300"><input type="checkbox" [(ngModel)]="questionForCurrentLecture" class="accent-[#2563EB]" /> Link to this lecture</label>
                         <button type="button" (click)="submitQuestion()" [disabled]="isSubmittingQuestion()" class="rounded-lg bg-[#2563EB] px-5 py-2.5 font-['JetBrains_Mono'] text-[10px] font-bold uppercase !text-white disabled:opacity-50">{{ isSubmittingQuestion() ? 'Publishing…' : 'Publish question' }}</button>
@@ -180,7 +180,7 @@ import {
                             <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">{{ initials(question.user.name) }}</div>
                             <div class="min-w-0 flex-1">
                               <div class="flex flex-wrap items-start justify-between gap-2"><h3 class="font-['Hanken_Grotesk'] text-base font-bold text-slate-950 dark:text-white">{{ question.title }}</h3><span class="rounded-full px-2 py-1 font-['JetBrains_Mono'] text-[9px] font-bold uppercase" [class.bg-emerald-100]="question.status !== 'OPEN'" [class.text-emerald-700]="question.status !== 'OPEN'" [class.bg-amber-100]="question.status === 'OPEN'" [class.text-amber-700]="question.status === 'OPEN'">{{ question.status }}</span></div>
-                              <p class="mt-1 text-xs text-slate-500">{{ question.user.name }} · {{ relativeDate(question.createdAt) }}<span *ngIf="question.lessonTitle"> · {{ question.lessonTitle }}</span></p>
+                              <p class="mt-1 text-xs text-slate-500">{{ question.user.name }} · {{ relativeDate(question.createdAt) }}@if (question.lessonTitle) {<span> · {{ question.lessonTitle }}</span>}</p>
                               <p class="mt-3 whitespace-pre-line text-sm leading-6 text-slate-700 dark:text-slate-300">{{ question.body }}</p>
 
                               @if (question.replies.length) {
@@ -232,7 +232,7 @@ import {
       <!-- Right Drawer Curriculum Navigation Sidebar -->
       <aside class="watch-sidebar w-full md:w-[40%] md:min-w-[320px] md:max-w-[520px] p-4 sm:p-5 md:p-6 flex flex-col gap-5 md:sticky md:top-16 md:h-[calc(100vh-4rem)]">
         <div class="shrink-0">
-          <span class="watch-accent font-['JetBrains_Mono'] text-xs uppercase font-bold">// COURSE CURRICULUM</span>
+          <span class="watch-accent font-['JetBrains_Mono'] text-xs uppercase font-bold">COURSE CURRICULUM</span>
           <h2 class="watch-heading font-['Hanken_Grotesk'] text-lg font-bold mt-1">{{ course()?.title }}</h2>
           <div class="flex items-center justify-between gap-3 mt-4">
             <span class="watch-muted font-['JetBrains_Mono'] text-[11px] uppercase">

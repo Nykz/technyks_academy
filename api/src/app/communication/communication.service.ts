@@ -248,7 +248,12 @@ export class CommunicationService {
     }
 
     if (sendEmail) {
-      emailStatus = await this.sendAnnouncementEmail(title, body, recipients);
+      emailStatus = await this.sendAnnouncementEmail(
+        id,
+        title,
+        body,
+        recipients,
+      );
       await this.setAnnouncementEmailStatus(id, emailStatus);
     }
     return (await this.readAnnouncements()).find(
@@ -273,6 +278,25 @@ export class CommunicationService {
         );
     }
     return { success: true };
+  }
+
+  getEmailConfiguration() {
+    const apiKey = String(this.config.get('RESEND_API_KEY') || '').trim();
+    const from = String(this.config.get('MAIL_FROM') || '').trim();
+    const replyTo = String(this.config.get('MAIL_REPLY_TO') || '').trim();
+    const domainMatch = from.match(/@([^>\s]+)>?$/);
+    return {
+      provider: 'Resend',
+      configured: Boolean(apiKey && from),
+      from: from || null,
+      replyTo: replyTo || null,
+      sendingDomain: domainMatch?.[1] || null,
+      requirements: [
+        'Verify the sending domain in Resend.',
+        'Publish SPF, DKIM, and DMARC records in DNS.',
+        'Use a monitored reply-to address and never buy email lists.',
+      ],
+    };
   }
 
   private async readQuestions(): Promise<any[]> {
@@ -496,32 +520,43 @@ export class CommunicationService {
   }
 
   private async sendAnnouncementEmail(
+    announcementId: string,
     title: string,
     body: string,
-    recipients: { email: string }[],
+    recipients: { email: string; name?: string }[],
   ) {
     if (!recipients.length) return 'NO_RECIPIENTS';
     const apiKey = String(this.config.get('RESEND_API_KEY') || '').trim();
     const from = String(this.config.get('MAIL_FROM') || '').trim();
+    const replyTo = String(this.config.get('MAIL_REPLY_TO') || '').trim();
+    const appUrl = String(
+      this.config.get('WEB_APP_URL') || 'https://courses.codingtechnyks.com',
+    ).replace(/\/$/, '');
     if (!apiKey || !from) return 'NOT_CONFIGURED';
     try {
       for (let index = 0; index < recipients.length; index += 50) {
-        const batch = recipients
-          .slice(index, index + 50)
-          .map((item) => item.email);
-        const response = await fetch('https://api.resend.com/emails', {
+        const batch = recipients.slice(index, index + 50).map((recipient) => {
+          const greeting = recipient.name
+            ? `Hello ${this.escapeHtml(recipient.name)},`
+            : 'Hello,';
+          const messageHtml = this.escapeHtml(body).replace(/\n/g, '<br>');
+          return {
+            from,
+            to: [recipient.email],
+            ...(replyTo ? { reply_to: replyTo } : {}),
+            subject: title,
+            text: `${recipient.name ? `Hello ${recipient.name},\n\n` : ''}${body}\n\nOpen your learning dashboard: ${appUrl}/dashboard\n\nTechnyks Academy`,
+            html: `<div style="margin:0;background:#f4f7fb;padding:32px 16px;font-family:Arial,sans-serif;color:#172033"><div style="max-width:620px;margin:auto;background:#ffffff;border:1px solid #dce5f2;border-radius:14px;overflow:hidden"><div style="background:#1d4ed8;color:#ffffff;padding:18px 24px;font-weight:700">Technyks Academy</div><div style="padding:28px 24px"><p style="margin-top:0">${greeting}</p><h1 style="font-size:24px;line-height:1.25;margin:12px 0 18px">${this.escapeHtml(title)}</h1><p style="font-size:16px;line-height:1.7">${messageHtml}</p><p style="margin:28px 0"><a href="${appUrl}/dashboard" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:8px;font-weight:700">Open learning dashboard</a></p><p style="font-size:12px;line-height:1.5;color:#64748b">You received this educational update because this email is enrolled in a Technyks Academy course. Reply to this email if you need help.</p></div></div></div>`,
+          };
+        });
+        const response = await fetch('https://api.resend.com/emails/batch', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
+            'Idempotency-Key': `announcement-${announcementId}-${index}`,
           },
-          body: JSON.stringify({
-            from,
-            to: [from],
-            bcc: batch,
-            subject: title,
-            html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><h2>${this.escapeHtml(title)}</h2><p>${this.escapeHtml(body).replace(/\n/g, '<br>')}</p><p style="color:#64748b">Technyks Academy</p></div>`,
-          }),
+          body: JSON.stringify(batch),
         });
         if (!response.ok)
           throw new Error(`Mail provider returned ${response.status}`);

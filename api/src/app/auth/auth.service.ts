@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../prisma/prisma.service';
@@ -31,6 +32,7 @@ export class AuthService implements OnModuleInit {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private config: ConfigService = new ConfigService(),
   ) {}
 
   async onModuleInit() {
@@ -107,7 +109,6 @@ export class AuthService implements OnModuleInit {
     email: string;
     password?: string;
     name: string;
-    googleId?: string;
   }) {
     const cleanEmail = dto.email.toLowerCase().trim();
 
@@ -139,7 +140,7 @@ export class AuthService implements OnModuleInit {
       id: `usr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`,
       email: cleanEmail,
       passwordHash,
-      googleId: dto.googleId || null,
+      googleId: null,
       name: dto.name,
       role,
       onboardingCompleted: false,
@@ -165,7 +166,7 @@ export class AuthService implements OnModuleInit {
     };
   }
 
-  async login(dto: { email: string; password?: string; googleId?: string }) {
+  async login(dto: { email: string; password?: string }) {
     const cleanEmail = dto.email.toLowerCase().trim();
 
     let user: any = null;
@@ -175,7 +176,7 @@ export class AuthService implements OnModuleInit {
       });
     }
 
-    if (!user) {
+    if (!this.prisma.isDbConnected && !user) {
       user = this.prisma.inMemoryUsers.find((u) => u.email === cleanEmail);
     }
 
@@ -191,12 +192,8 @@ export class AuthService implements OnModuleInit {
       if (!valid) {
         throw new UnauthorizedException('Invalid email or password.');
       }
-    } else if (dto.googleId) {
-      if (user.googleId !== dto.googleId) {
-        throw new UnauthorizedException('Google authentication failed.');
-      }
     } else {
-      throw new BadRequestException('Password or Google ID required.');
+      throw new BadRequestException('Password is required.');
     }
 
     const token = this.generateToken(user.id, user.email, user.role);
@@ -311,9 +308,11 @@ export class AuthService implements OnModuleInit {
     if (this.prisma.isDbConnected) {
       user = await this.prisma.user.findUnique({ where: { id: userId } });
     }
-    user ??= this.prisma.inMemoryUsers.find(
-      (candidate) => candidate.id === userId,
-    );
+    if (!this.prisma.isDbConnected) {
+      user ??= this.prisma.inMemoryUsers.find(
+        (candidate) => candidate.id === userId,
+      );
+    }
     if (!user)
       throw new UnauthorizedException('User account could not be found.');
     return this.toPublicUser(user);
@@ -362,6 +361,10 @@ export class AuthService implements OnModuleInit {
   }
 
   async forgotPassword(email: string) {
+    const response = {
+      message:
+        'If an account exists with this email, a reset link has been dispatched.',
+    };
     const cleanEmail = email.toLowerCase().trim();
     let user: any = null;
     if (this.prisma.isDbConnected) {
@@ -372,22 +375,14 @@ export class AuthService implements OnModuleInit {
       user = this.prisma.inMemoryUsers.find((u) => u.email === cleanEmail);
     }
 
-    if (!user) {
-      return {
-        message:
-          'If an account exists with this email, a reset link has been dispatched.',
-      };
-    }
+    if (!user) return response;
 
     const resetToken = this.jwtService.sign(
       { sub: user.id, purpose: 'reset-password' },
-      { expiresIn: '1h' },
+      { expiresIn: '30m' },
     );
-
-    return {
-      message: 'Password reset link dispatched successfully.',
-      resetToken,
-    };
+    await this.sendPasswordResetEmail(user.email, user.name, resetToken);
+    return response;
   }
 
   async resetPassword(resetToken: string, newPassword?: string) {
@@ -397,9 +392,9 @@ export class AuthService implements OnModuleInit {
         throw new BadRequestException('Invalid reset token.');
       }
 
-      if (!newPassword || newPassword.length < 6) {
+      if (!newPassword || newPassword.length < 8) {
         throw new BadRequestException(
-          'Password must be at least 6 characters.',
+          'Password must be at least 8 characters.',
         );
       }
 
@@ -429,6 +424,52 @@ export class AuthService implements OnModuleInit {
       email,
       role,
     });
+  }
+
+  private async sendPasswordResetEmail(
+    email: string,
+    name: string,
+    resetToken: string,
+  ) {
+    const apiKey = String(this.config.get('RESEND_API_KEY') || '').trim();
+    const from = String(this.config.get('MAIL_FROM') || '').trim();
+    const webAppUrl = String(
+      this.config.get('WEB_APP_URL') || 'https://courses.codingtechnyks.com',
+    ).replace(/\/$/, '');
+    if (!apiKey || !from) {
+      this.logger.warn(
+        'Password reset requested, but RESEND_API_KEY or MAIL_FROM is not configured.',
+      );
+      return;
+    }
+    const resetUrl = `${webAppUrl}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from,
+          to: [email],
+          subject: 'Reset your Technyks Academy password',
+          text:
+            `Hello ${String(name || 'learner').trim()},\n\n` +
+            `Use this secure link to reset your password within 30 minutes:\n${resetUrl}\n\n` +
+            'If you did not request this, you can ignore this email.',
+        }),
+      });
+      if (!response.ok) {
+        this.logger.error(
+          `Password reset email provider returned ${response.status}.`,
+        );
+      }
+    } catch (error: any) {
+      this.logger.error(
+        `Password reset email could not be sent: ${error?.message || 'unknown error'}`,
+      );
+    }
   }
 
   private toPublicUser(user: any) {

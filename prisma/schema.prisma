@@ -58,6 +58,7 @@ model User {
   courseQuestions      CourseQuestion[]
   courseReplies        CourseReply[]
   courseAnnouncements  CourseAnnouncement[] @relation("AnnouncementAuthor")
+  templatePurchases    UiTemplatePurchase[]
 }
 
 model Course {
@@ -190,20 +191,24 @@ model Subscription {
 }
 
 model Coupon {
-  id              String    @id @default(uuid())
-  code            String    @unique
-  discountPercent Float?
-  discountAmount  Float?
-  currency        String    @default("INR")
-  scope           String    @default("COURSE")
-  courseId        String?
-  course          Course?   @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  expiryDate      DateTime?
-  usageLimit      Int?
-  timesUsed       Int       @default(0)
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                String      @id @default(uuid())
+  code              String      @unique
+  discountPercent   Float?
+  discountAmount    Float?
+  currency          String      @default("INR")
+  scope             String      @default("COURSE")
+  courseId          String?
+  course            Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  templateProductId String?
+  templateProduct   UiTemplate? @relation(fields: [templateProductId], references: [id], onDelete: SetNull)
+  expiryDate        DateTime?
+  usageLimit        Int?
+  timesUsed         Int         @default(0)
+  isActive          Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([templateProductId])
 }
 
 model Certificate {
@@ -220,21 +225,66 @@ model Certificate {
 }
 
 model Payment {
-  id              String          @id @default(uuid())
-  userId          String
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount          Float
-  currency        String
-  status          PaymentStatus   @default(PENDING)
-  provider        PaymentProvider
-  paymentIntentId String?         @unique
-  subscriptionId  String?
-  planId          String?
-  courseId        String?
-  couponCode      String?
-  course          Course?         @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id                 String          @id @default(uuid())
+  userId             String
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount             Float
+  currency           String
+  status             PaymentStatus   @default(PENDING)
+  provider           PaymentProvider
+  paymentIntentId    String?         @unique
+  subscriptionId     String?
+  planId             String?
+  courseId           String?
+  templateProductIds Json?
+  couponCode         String?
+  course             Course?         @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+model UiTemplate {
+  id                 String               @id @default(uuid())
+  slug               String               @unique
+  title              String
+  tagline            String
+  description        String               @db.Text
+  thumbnail          String?              @db.Text
+  promoVideoUrl      String?              @db.Text
+  previewUrl         String?              @db.Text
+  price              Float
+  currency           String               @default("INR")
+  category           String               @default("Website UI")
+  tags               Json
+  filePath           String?              @db.Text
+  fileName           String?
+  fileSize           Int?
+  deliveryUrl        String?              @db.Text
+  downloadButtonText String               @default("Download files")
+  buyerMessage       String?              @db.Text
+  isPublished        Boolean              @default(false)
+  isFeatured         Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  purchases          UiTemplatePurchase[]
+  coupons            Coupon[]
+
+  @@index([isPublished, createdAt])
+}
+
+model UiTemplatePurchase {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   UiTemplate @relation(fields: [productId], references: [id], onDelete: Restrict)
+  amount    Float
+  currency  String     @default("INR")
+  paymentId String?
+  createdAt DateTime   @default(now())
+
+  @@unique([userId, productId])
+  @@index([createdAt])
 }
 
 model ContactMessage {

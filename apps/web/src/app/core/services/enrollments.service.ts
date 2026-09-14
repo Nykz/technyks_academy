@@ -36,6 +36,14 @@ export class EnrollmentsService {
     return this.http.get<Enrollment[]>('/api/enrollments/my');
   }
 
+  getCourseAccess(
+    courseId: string,
+  ): Observable<{ enrolled: boolean; enrollment: Enrollment | null }> {
+    return this.http.get<{ enrolled: boolean; enrollment: Enrollment | null }>(
+      `/api/enrollments/access/${encodeURIComponent(courseId)}`,
+    );
+  }
+
   enrollInFreeCourse(courseId: string): Observable<Enrollment> {
     return this.http.post<Enrollment>('/api/enrollments/free', { courseId });
   }

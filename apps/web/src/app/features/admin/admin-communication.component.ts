@@ -6,6 +6,7 @@ import {
   CommunicationService,
   CourseAnnouncement,
   CourseQuestion,
+  EmailConfiguration,
 } from '../../core/services/communication.service';
 
 @Component({
@@ -254,6 +255,53 @@ import {
           }
         </div>
       } @else {
+        <div
+          class="rounded-xl border p-5"
+          [class.border-emerald-200]="emailConfiguration()?.configured"
+          [class.bg-emerald-50]="emailConfiguration()?.configured"
+          [class.border-amber-200]="!emailConfiguration()?.configured"
+          [class.bg-amber-50]="!emailConfiguration()?.configured"
+        >
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div class="flex items-center gap-2">
+                <span
+                  class="material-symbols-outlined"
+                  [class.text-emerald-600]="emailConfiguration()?.configured"
+                  [class.text-amber-600]="!emailConfiguration()?.configured"
+                  >{{ emailConfiguration()?.configured ? 'verified' : 'dns' }}</span
+                >
+                <h3 class="font-['Hanken_Grotesk'] text-lg font-bold text-slate-950">
+                  Email delivery · {{ emailConfiguration()?.provider || 'Resend' }}
+                </h3>
+              </div>
+              <p class="mt-2 text-sm text-slate-700">
+                @if (emailConfiguration()?.configured) {
+                  Ready to send individually addressed, branded course announcements
+                  from {{ emailConfiguration()?.from }}.
+                } @else {
+                  LMS announcements work now. Add the Resend key and verify your domain
+                  before email delivery can be activated.
+                }
+              </p>
+            </div>
+            <span
+              class="w-fit rounded-full px-3 py-1 font-['JetBrains_Mono'] text-[9px] font-bold uppercase"
+              [class.bg-emerald-100]="emailConfiguration()?.configured"
+              [class.text-emerald-700]="emailConfiguration()?.configured"
+              [class.bg-amber-100]="!emailConfiguration()?.configured"
+              [class.text-amber-700]="!emailConfiguration()?.configured"
+              >{{ emailConfiguration()?.configured ? 'Ready' : 'Setup required' }}</span
+            >
+          </div>
+          @if (!emailConfiguration()?.configured) {
+            <ol class="mt-4 grid gap-2 text-xs text-slate-700 sm:grid-cols-3">
+              @for (requirement of emailConfiguration()?.requirements || []; track requirement) {
+                <li class="rounded-lg bg-white/70 px-3 py-2">{{ $index + 1 }}. {{ requirement }}</li>
+              }
+            </ol>
+          }
+        </div>
         <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
           <div
             class="rounded-xl border border-slate-200 bg-white p-5 dark:border-[#26334B] dark:bg-[#101827] sm:p-7"
@@ -276,9 +324,9 @@ import {
                 </p>
               </div>
             </div>
-            <label
+            <p
               class="mt-6 block font-['JetBrains_Mono'] text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300"
-              >Audience</label
+              >Audience</p
             >
             <div
               class="mt-2 rounded-xl border border-slate-200 p-4 dark:border-[#334155]"
@@ -318,20 +366,24 @@ import {
               </p>
             </div>
             <label
+              for="announcement-subject"
               class="mt-5 block font-['JetBrains_Mono'] text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300"
               >Subject</label
             >
             <input
+              id="announcement-subject"
               [(ngModel)]="announcementTitle"
               maxlength="240"
               placeholder="Course update, live session, or new lesson"
               class="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-950 outline-none focus:border-[#2563EB] dark:border-[#334155] dark:bg-[#0B111D] dark:text-white"
             />
             <label
+              for="announcement-message"
               class="mt-5 block font-['JetBrains_Mono'] text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300"
               >Message</label
             >
             <textarea
+              id="announcement-message"
               [(ngModel)]="announcementBody"
               maxlength="10000"
               rows="9"
@@ -350,7 +402,7 @@ import {
                 /><span
                   ><strong class="block">Also send by email</strong
                   ><span class="text-xs text-slate-500"
-                    >Requires the configured mail provider.</span
+                    >{{ emailConfiguration()?.configured ? 'Sent directly to each selected student.' : 'Requires verified Resend domain setup.' }}</span
                   ></span
                 ></label
               ><button
@@ -447,6 +499,7 @@ export class AdminCommunicationComponent implements OnInit {
   section = signal<'questions' | 'announcements'>('questions');
   questions = signal<CourseQuestion[]>([]);
   announcements = signal<CourseAnnouncement[]>([]);
+  emailConfiguration = signal<EmailConfiguration | null>(null);
   isLoadingQuestions = signal(true);
   questionSearch = '';
   questionCourseId = '';
@@ -464,6 +517,9 @@ export class AdminCommunicationComponent implements OnInit {
   ngOnInit() {
     this.loadQuestions();
     this.loadAnnouncements();
+    this.communicationService
+      .getEmailConfiguration()
+      .subscribe((configuration) => this.emailConfiguration.set(configuration));
   }
 
   loadQuestions() {

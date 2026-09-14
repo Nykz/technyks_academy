@@ -433,16 +433,32 @@ body:not(.dark) .hero-overlay {
 .light-theme [class~="bg-[#ffb4ab]/10"] { background-color: #fff1f2 !important; }
 
 .light-theme p[class~="text-white"],
-.light-theme span[class~="text-white"]:not([class*="bg-"]):not(a *):not(button *),
+.light-theme span[class~="text-white"]:not([class*="bg-"]),
 .light-theme h1[class~="text-white"],
 .light-theme h2[class~="text-white"],
 .light-theme h3[class~="text-white"],
+.light-theme h4[class~="text-white"],
+.light-theme h5[class~="text-white"],
+.light-theme h6[class~="text-white"],
+.light-theme td[class~="text-white"],
+.light-theme th[class~="text-white"],
 .light-theme div[class~="text-white"]:not([class*="bg-"]) { color: #172033 !important; }
 .light-theme a[class~="text-white"]:not([class~="!text-white"]):not([class~="bg-[#1D4ED8]"]):not([class~="bg-[#2563EB]"]):not([class~="bg-[#3B82F6]"]):not([class*="bg-purple"]):not([class*="bg-indigo"]):not([class*="bg-violet"]),
 .light-theme button[class~="text-white"]:not([class~="!text-white"]):not([class~="bg-[#1D4ED8]"]):not([class~="bg-[#2563EB]"]):not([class~="bg-[#3B82F6]"]):not([class*="bg-purple"]):not([class*="bg-indigo"]):not([class*="bg-violet"]),
 .light-theme label[class~="text-white"]:not([class~="!text-white"]),
 .light-theme strong[class~="text-white"],
 .light-theme li[class~="text-white"] { color: #172033 !important; }
+
+/* Native fields must keep legible entered values and placeholders in light mode. */
+.light-theme input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']),
+.light-theme textarea,
+.light-theme select {
+  color: #172033;
+  caret-color: #172033;
+  color-scheme: light;
+}
+.light-theme input::placeholder,
+.light-theme textarea::placeholder { color: #64748b; opacity: 1; }
 .light-theme [class~="text-[#040810]"]:not(button):not(a) { color: #172033 !important; }
 .light-theme [class~="text-[#e0e3e5]"]:not(button):not(a) { color: #172033 !important; }
 .light-theme [class~="text-[#d9c3af]"] { color: #475569 !important; }
@@ -710,6 +726,57 @@ a[class*="bg-violet"] *,
   min-width: 0;
 }
 
+.admin-side-link {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: .7rem;
+  border: 1px solid transparent;
+  border-radius: .75rem;
+  padding: .72rem;
+  color: #475569;
+  font: 700 .7rem 'JetBrains Mono';
+  text-transform: uppercase;
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.admin-side-link:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #1d4ed8;
+}
+
+.admin-side-link.admin-side-active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.dark-theme .admin-side-link {
+  color: #94a3b8;
+}
+
+.dark-theme .admin-side-link:hover {
+  border-color: #334155;
+  background: #121a2b;
+  color: #93c5fd;
+}
+
+.dark-theme .admin-side-link.admin-side-active {
+  border-color: rgba(59, 130, 246, .38);
+  background: rgba(30, 64, 175, .22);
+  color: #93c5fd;
+}
+
+@media (min-width: 768px) {
+  .admin-side-link {
+    justify-content: flex-start;
+    padding: .72rem .8rem;
+  }
+}
+
 .light-theme .admin-shell input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']),
 .light-theme .admin-shell select,
 .light-theme .admin-shell textarea {
@@ -777,6 +844,26 @@ a[class*="bg-violet"] *,
   0% { transform: scale(.97); }
   70% { transform: scale(1.025); }
   100% { transform: scale(1); }
+}
+
+/* Minimal shim for the Tailwind Animate ("animate-in fade-in duration-*")
+   utility classes used on save-confirmation badges across the admin panel.
+   That plugin isn't installed in tailwind.config.js, so without this those
+   classes previously did nothing and the badges just popped in instantly. */
+@keyframes admin-fade-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in.fade-in {
+  animation-name: admin-fade-in;
+  animation-duration: 200ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+.animate-in.fade-in.duration-200 { animation-duration: 200ms; }
+.animate-in.fade-in.duration-300 { animation-duration: 300ms; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-in.fade-in { animation: none; }
 }
 
 @media (max-width: 767px) {

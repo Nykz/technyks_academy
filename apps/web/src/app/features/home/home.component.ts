@@ -89,7 +89,7 @@ import { AuthService } from '../../core/services/auth.service';
         <div class="px-6 md:px-16 mb-4 flex items-center justify-between">
           <span
             class="font-['JetBrains_Mono'] text-xs uppercase text-[#a18d7b] tracking-widest font-semibold"
-            >// ENTERPRISE STACK & AI TOOLING</span
+            >ENTERPRISE STACK & AI TOOLING</span
           >
           <span class="font-['JetBrains_Mono'] text-[11px] text-[#3B82F6]"
             >HANDS-ON FRAMEWORKS & AGENTS</span
@@ -149,7 +149,7 @@ import { AuthService } from '../../core/services/auth.service';
           <div>
             <span
               class="font-['JetBrains_Mono'] text-xs uppercase text-[#3B82F6] tracking-widest font-semibold"
-              >// CURRICULUM</span
+              >CURRICULUM</span
             >
             <h2
               class="font-['Hanken_Grotesk'] text-2xl md:text-3xl font-bold text-white mt-1"
@@ -195,7 +195,7 @@ import { AuthService } from '../../core/services/auth.service';
         <div class="max-w-4xl mx-auto text-center mb-14">
           <span
             class="font-['JetBrains_Mono'] text-xs uppercase text-[#3B82F6] tracking-widest font-semibold"
-            >// MEMBERSHIP PLANS</span
+            >MEMBERSHIP PLANS</span
           >
           <h2
             class="font-['Hanken_Grotesk'] text-3xl md:text-5xl font-bold text-white mt-2 mb-4"

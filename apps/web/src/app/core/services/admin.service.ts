@@ -43,8 +43,9 @@ export interface Coupon {
   code: string;
   discountPercent?: number | null;
   discountAmount?: number | null;
-  scope: 'COURSE' | 'MEMBERSHIP';
+  scope: 'COURSE' | 'MEMBERSHIP' | 'TEMPLATE';
   courseId?: string | null;
+  templateProductId?: string | null;
   usageLimit?: number;
   timesUsed: number;
   isActive: boolean;
@@ -157,6 +158,14 @@ export class AdminService {
     return this.http.get<Coupon[]>('/api/admin/coupons').pipe(
       tap((coupons) => this.storeLocal(COUPONS_STORAGE_KEY, coupons)),
     );
+  }
+
+  getCourseCoupon(courseId: string): Observable<Coupon | null> {
+    return this.http.get<Coupon | null>(`/api/admin/courses/${encodeURIComponent(courseId)}/coupon`);
+  }
+
+  saveCourseCoupon(courseId: string, payload: Partial<Coupon>): Observable<Coupon> {
+    return this.http.patch<Coupon>(`/api/admin/courses/${encodeURIComponent(courseId)}/coupon`, payload);
   }
 
   getMembershipPlans(): Observable<MembershipPlan[]> {
