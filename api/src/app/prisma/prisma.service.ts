@@ -6,6 +6,20 @@ import {
 } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
+function describeDatabaseUrl(rawUrl: string | undefined): string {
+  try {
+    const url = new URL(String(rawUrl || '').trim());
+    return (
+      `host=${url.hostname} port=${url.port || '3306'} ` +
+      `user=${decodeURIComponent(url.username) || '(none)'} ` +
+      `database=${url.pathname.replace(/^\//, '') || '(none)'} ` +
+      `password=${url.password ? 'set' : 'MISSING'}`
+    );
+  } catch {
+    return 'DATABASE_URL is not a valid URL (special characters in the password must be URL-encoded)';
+  }
+}
+
 @Injectable()
 export class PrismaService
   extends PrismaClient
@@ -46,8 +60,16 @@ export class PrismaService
         process.env.ALLOW_IN_MEMORY_FALLBACK === 'true' &&
         process.env.NODE_ENV !== 'production';
       if (!fallbackAllowed) {
+        // Surface the real cause (Prisma code + message) and where we tried
+        // to connect, never the password, so the host's runtime log is
+        // enough to diagnose a broken DATABASE_URL or a missing table.
+        const reason = String(error?.message || error)
+          .replace(/mysql:\/\/[^\s'"`]+/gi, 'mysql://***')
+          .trim();
         throw new Error(
-          'Database initialization failed. Persistent storage is required; check the database connection and schema.',
+          'Database initialization failed. Persistent storage is required; check the database connection and schema. ' +
+            `Target: ${describeDatabaseUrl(process.env.DATABASE_URL)}. ` +
+            `Cause${error?.code ? ` [${error.code}]` : ''}: ${reason}`,
         );
       }
       this.logger.warn(
