@@ -138,23 +138,46 @@ if (isApiBuild) {
   const rootPackage = JSON.parse(
     readFileSync(join(process.cwd(), 'package.json'), 'utf8'),
   );
-  const apiRuntimeDependencyNames = [
+  // Packages Nest loads lazily at runtime (so they never appear as a
+  // require() in the bundle) plus the core peers every Nest app needs.
+  const lazyRuntimeDependencyNames = [
     '@nestjs/common',
-    '@nestjs/config',
     '@nestjs/core',
-    '@nestjs/jwt',
-    '@nestjs/passport',
     '@nestjs/platform-express',
     '@prisma/client',
-    'bcryptjs',
+    'class-transformer',
+    'class-validator',
     'express',
-    'google-auth-library',
     'passport',
-    'passport-jwt',
     'reflect-metadata',
     'rxjs',
     'tslib',
   ];
+  // Every non-builtin package the webpack bundle require()s is external and
+  // must be installed on Hostinger. Derive the list from the bundle itself so
+  // a newly imported package can never be silently left out again (that is
+  // what took the site down with "Cannot find module 'helmet'").
+  const { builtinModules } = require('node:module');
+  const bundleSource = readFileSync(join(distApiDir, 'main.js'), 'utf8');
+  const bundledRequires = [...bundleSource.matchAll(/require\("([^".][^"]*)"\)/g)]
+    .map((match) => match[1])
+    .filter((request) => !request.startsWith('node:') && !builtinModules.includes(request))
+    .map((request) => request.startsWith('@')
+      ? request.split('/').slice(0, 2).join('/')
+      : request.split('/')[0]);
+  const apiRuntimeDependencyNames = [
+    ...new Set([...lazyRuntimeDependencyNames, ...bundledRequires]),
+  ].sort();
+  const missingVersions = apiRuntimeDependencyNames.filter(
+    (name) => !rootPackage.dependencies[name],
+  );
+  if (missingVersions.length) {
+    console.error(
+      `❌ The API needs these packages at runtime but they are not in package.json "dependencies": ${missingVersions.join(', ')}`,
+    );
+    process.exit(1);
+  }
+  console.log(`[Build] API runtime dependencies: ${apiRuntimeDependencyNames.join(', ')}`);
   const apiRuntimeDependencies = Object.fromEntries(
     apiRuntimeDependencyNames.map((name) => [
       name,
