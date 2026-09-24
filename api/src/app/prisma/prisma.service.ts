@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { BOOTSTRAP_FOREIGN_KEYS, BOOTSTRAP_TABLES } from './bootstrap-schema';
 
 function describeDatabaseUrl(rawUrl: string | undefined): string {
   try {
@@ -49,6 +50,7 @@ export class PrismaService
   async onModuleInit() {
     try {
       await this.$connect();
+      await this.ensureBaseSchema();
       await this.ensureRuntimeColumns();
       await this.ensureCommunicationTables();
       await this.ensureTemplateStoreTables();
@@ -82,6 +84,34 @@ export class PrismaService
   async onModuleDestroy() {
     if (this.isDbConnected) {
       await this.$disconnect();
+    }
+  }
+
+  /**
+   * Creates any table from prisma/schema.prisma that does not exist yet, plus
+   * the foreign keys of the tables it created. Existing tables are never
+   * altered. This covers hosts where `prisma db push` cannot run during the
+   * build (e.g. Hostinger refusing to execute Prisma's schema-engine binary).
+   */
+  private async ensureBaseSchema() {
+    const rows = await this.$queryRawUnsafe<{ name: string }[]>(
+      'SELECT TABLE_NAME AS name FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()',
+    );
+    const existing = new Set(rows.map((row) => String(row.name).toLowerCase()));
+    const created = new Set<string>();
+
+    for (const table of BOOTSTRAP_TABLES) {
+      if (existing.has(table.name.toLowerCase())) continue;
+      await this.$executeRawUnsafe(table.sql);
+      created.add(table.name);
+    }
+    for (const foreignKey of BOOTSTRAP_FOREIGN_KEYS) {
+      if (created.has(foreignKey.table)) {
+        await this.$executeRawUnsafe(foreignKey.sql);
+      }
+    }
+    if (created.size) {
+      this.logger.log(`Created missing database tables: ${[...created].join(', ')}`);
     }
   }
 

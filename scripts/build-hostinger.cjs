@@ -66,12 +66,29 @@ function requireMySqlDatabaseUrl() {
 function ensurePrismaEngineExecutable() {
   if (process.platform === 'win32') return;
 
-  const enginesDir = join(process.cwd(), 'node_modules', '@prisma', 'engines');
-  if (!existsSync(enginesDir)) return;
+  // npm hoists @prisma/engines to node_modules/@prisma/engines, but pnpm
+  // (which Hostinger uses) keeps it under node_modules/.pnpm/@prisma+engines@*/.
+  const nodeModules = join(process.cwd(), 'node_modules');
+  const enginesDirs = [join(nodeModules, '@prisma', 'engines')];
+  const pnpmStore = join(nodeModules, '.pnpm');
+  if (existsSync(pnpmStore)) {
+    for (const entry of readdirSync(pnpmStore)) {
+      if (entry.startsWith('@prisma+engines@')) {
+        enginesDirs.push(join(pnpmStore, entry, 'node_modules', '@prisma', 'engines'));
+      }
+    }
+  }
 
-  for (const fileName of readdirSync(enginesDir)) {
-    if (fileName.startsWith('schema-engine-')) {
-      chmodSync(join(enginesDir, fileName), 0o755);
+  for (const enginesDir of enginesDirs) {
+    if (!existsSync(enginesDir)) continue;
+    for (const fileName of readdirSync(enginesDir)) {
+      if (fileName.startsWith('schema-engine-')) {
+        try {
+          chmodSync(join(enginesDir, fileName), 0o755);
+        } catch (error) {
+          console.warn(`⚠️ [Build] Could not mark ${fileName} executable: ${error.message}`);
+        }
+      }
     }
   }
 }
