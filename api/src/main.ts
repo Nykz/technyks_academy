@@ -87,6 +87,10 @@ async function bootstrap() {
       contentSecurityPolicy: false,
       crossOriginResourcePolicy: { policy: 'cross-origin' },
       crossOriginEmbedderPolicy: false,
+      // helmet's default "no-referrer" strips the Referer from the Bunny
+      // player iframe, so Bunny's "Allowed domains" check rejects every
+      // embed. Send only the origin (https://technyks.com) to other sites.
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     }),
   );
 

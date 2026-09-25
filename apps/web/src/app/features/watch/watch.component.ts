@@ -41,6 +41,7 @@ import {
               [src]="safeEmbedUrl()"
               class="w-full h-full border-0"
               allow="autoplay; encrypted-media; picture-in-picture"
+              referrerpolicy="strict-origin-when-cross-origin"
               allowfullscreen
             ></iframe>
           </div>
