@@ -5,8 +5,12 @@ import {
   OnInit,
   OnDestroy,
   HostListener,
+  PLATFORM_ID,
+  ElementRef,
+  viewChild,
+  effect,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -38,12 +42,41 @@ import {
         } @else if (playbackData()?.videoAvailable && safeEmbedUrl()) {
           <div class="watch-player w-full aspect-video rounded overflow-hidden shadow-2xl relative">
             <iframe
+              #playerFrame
               [src]="safeEmbedUrl()"
               class="w-full h-full border-0"
               allow="autoplay; encrypted-media; picture-in-picture"
               referrerpolicy="strict-origin-when-cross-origin"
               allowfullscreen
             ></iframe>
+
+            @if (upNext(); as next) {
+              <div class="absolute inset-0 bg-[#040810]/90 flex flex-col items-center justify-center gap-4 p-5 text-center" role="dialog" aria-live="polite" aria-label="Next lecture">
+                <span class="font-['JetBrains_Mono'] text-[11px] font-bold uppercase tracking-widest text-[#60A5FA]">
+                  {{ upNextCountdown() > 0 ? 'Up next in ' + upNextCountdown() + 's' : 'Up next' }}
+                </span>
+                <p class="font-['Hanken_Grotesk'] text-lg sm:text-xl font-bold text-white max-w-xl">{{ next.title }}</p>
+                <div class="flex flex-wrap justify-center gap-3">
+                  <button type="button" (click)="playNextNow()"
+                    class="font-['JetBrains_Mono'] text-xs font-bold uppercase !text-white bg-[#2563EB] px-5 py-3 rounded hover:bg-[#1D4ED8] flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm">skip_next</span> Play now
+                  </button>
+                  <button type="button" (click)="cancelUpNext()"
+                    class="font-['JetBrains_Mono'] text-xs font-bold uppercase text-white border border-white/40 px-5 py-3 rounded hover:bg-white/10">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            } @else if (courseFinished()) {
+              <div class="absolute inset-0 bg-[#040810]/90 flex flex-col items-center justify-center gap-3 p-5 text-center" role="status">
+                <span class="material-symbols-outlined text-4xl text-[#60A5FA]">workspace_premium</span>
+                <p class="font-['Hanken_Grotesk'] text-lg sm:text-xl font-bold text-white">You've reached the end of the course</p>
+                <button type="button" (click)="courseFinished.set(false)"
+                  class="font-['JetBrains_Mono'] text-xs font-bold uppercase text-white border border-white/40 px-5 py-3 rounded hover:bg-white/10">
+                  Close
+                </button>
+              </div>
+            }
           </div>
 
           <div class="watch-card flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 sm:p-6 rounded">
@@ -57,6 +90,22 @@ import {
               </h1>
             </div>
 
+            <div class="flex flex-wrap items-center gap-3">
+            @if (playbackData()?.provider === 'BUNNY') {
+              <button
+                type="button"
+                role="switch"
+                [attr.aria-checked]="autoplayNext()"
+                (click)="toggleAutoplayNext()"
+                class="watch-muted font-['JetBrains_Mono'] text-xs font-bold uppercase flex items-center gap-2 px-3 py-3 rounded border border-slate-400/40 hover:opacity-80"
+                title="Start the next lecture automatically when this one ends"
+              >
+                <span class="relative inline-block w-8 h-4 rounded-full transition-colors" [class]="autoplayNext() ? 'bg-[#2563EB]' : 'bg-slate-400'">
+                  <span class="absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all" [class]="autoplayNext() ? 'left-[18px]' : 'left-0.5'"></span>
+                </span>
+                Autoplay
+              </button>
+            }
             <button
               (click)="markAsCompleted()"
               [disabled]="isCurrentLessonCompleted()"
@@ -68,6 +117,7 @@ import {
               </span>
               {{ isCurrentLessonCompleted() ? 'Lesson Completed' : 'Mark as Completed' }}
             </button>
+            </div>
           </div>
           @if (progressError()) {
             <p class="watch-progress-error font-['Inter'] text-xs" role="alert">{{ progressError() }}</p>
@@ -358,10 +408,48 @@ export class WatchComponent implements OnInit, OnDestroy {
   private progressInterval: any;
   Math = Math;
 
+  // Auto-advance to the next lecture (Bunny Stream lessons only; the Bunny
+  // player reports "ended" through the Player.js postMessage protocol).
+  private platformId = inject(PLATFORM_ID);
+  private playerFrame = viewChild<ElementRef<HTMLIFrameElement>>('playerFrame');
+  private bunnyPlayer: any = null;
+  private endHandled = false;
+  private upNextTimer: ReturnType<typeof setInterval> | null = null;
+  private static playerJsLoader: Promise<any> | null = null;
+  private static readonly AUTOPLAY_KEY = 'technyks-autoplay-next';
+  autoplayNext = signal(true);
+  upNext = signal<{ id: string; title: string } | null>(null);
+  upNextCountdown = signal(0);
+  courseFinished = signal(false);
+
+  constructor() {
+    // A fresh iframe is rendered for every lesson; connect to it as soon as
+    // it exists so the player's "ready" message is not missed.
+    effect(() => {
+      const frame = this.playerFrame()?.nativeElement;
+      if (frame && this.playbackData()?.provider === 'BUNNY') {
+        this.attachBunnyPlayer(frame, this.currentLessonId());
+      }
+    });
+  }
+
   ngOnInit() {
+    if (isPlatformBrowser(this.platformId)) {
+      try {
+        this.autoplayNext.set(
+          localStorage.getItem(WatchComponent.AUTOPLAY_KEY) !== 'off',
+        );
+      } catch {
+        // Storage can be blocked; autoplay simply stays on.
+      }
+    }
+
     this.route.params.subscribe((params) => {
       const slug = params['slug'];
       const lessonId = params['lessonId'];
+      this.cancelUpNext();
+      this.courseFinished.set(false);
+      this.detachBunnyPlayer();
       this.currentLessonId.set(lessonId);
       this.isLoading.set(true);
       this.playbackData.set(null);
@@ -420,6 +508,8 @@ export class WatchComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.cancelUpNext();
+    this.detachBunnyPlayer();
     if (this.progressInterval) {
       clearInterval(this.progressInterval);
     }
@@ -435,15 +525,25 @@ export class WatchComponent implements OnInit, OnDestroy {
     this.isLoading.set(true);
     this.enrollmentsService.getVideoToken(lessonId).subscribe({
       next: (data) => {
-        this.playbackData.set(data);
-        this.playbackError.set('');
-        this.safeEmbedUrl.set(
-          data.embedUrl
-            ? this.sanitizer.bypassSecurityTrustResourceUrl(data.embedUrl)
-            : null,
-        );
-        this.isLoading.set(false);
-        this.saveProgressInterval();
+        const show = () => {
+          if (this.currentLessonId() !== lessonId) return;
+          this.playbackData.set(data);
+          this.playbackError.set('');
+          this.safeEmbedUrl.set(
+            data.embedUrl
+              ? this.sanitizer.bypassSecurityTrustResourceUrl(data.embedUrl)
+              : null,
+          );
+          this.isLoading.set(false);
+          this.saveProgressInterval();
+        };
+        // Player.js must be listening before the Bunny iframe announces it
+        // is ready, so load it first. Playback never waits on it failing.
+        if (data.provider === 'BUNNY' && isPlatformBrowser(this.platformId)) {
+          this.loadPlayerJs().then(show, show);
+        } else {
+          show();
+        }
       },
       error: (error) => {
         this.isLoading.set(false);
@@ -788,6 +888,113 @@ export class WatchComponent implements OnInit, OnDestroy {
     const days = Math.floor(hours / 24);
     if (days < 30) return `${days}d ago`;
     return new Date(value).toLocaleDateString();
+  }
+
+  toggleAutoplayNext() {
+    const enabled = !this.autoplayNext();
+    this.autoplayNext.set(enabled);
+    try {
+      localStorage.setItem(WatchComponent.AUTOPLAY_KEY, enabled ? 'on' : 'off');
+    } catch {
+      // Preference just isn't remembered when storage is blocked.
+    }
+  }
+
+  playNextNow() {
+    const next = this.upNext();
+    const slug = this.course()?.slug;
+    this.cancelUpNext();
+    if (next && slug) this.router.navigate(['/courses', slug, 'watch', next.id]);
+  }
+
+  cancelUpNext() {
+    if (this.upNextTimer) clearInterval(this.upNextTimer);
+    this.upNextTimer = null;
+    this.upNext.set(null);
+    this.upNextCountdown.set(0);
+  }
+
+  private nextLessonAfter(lessonId: string) {
+    const lessons = (this.course()?.modules || []).flatMap(
+      (module) => module.lessons || [],
+    );
+    const index = lessons.findIndex((lesson) => lesson.id === lessonId);
+    const next = index >= 0 ? lessons[index + 1] : undefined;
+    return next ? { id: next.id, title: next.title } : null;
+  }
+
+  private onLessonEnded(lessonId: string) {
+    if (this.endHandled || this.currentLessonId() !== lessonId) return;
+    this.endHandled = true;
+    this.markAsCompleted();
+
+    const next = this.nextLessonAfter(lessonId);
+    if (!next) {
+      this.courseFinished.set(true);
+      return;
+    }
+    this.upNext.set(next);
+    if (!this.autoplayNext()) return; // Show "Up next" without a countdown.
+
+    this.upNextCountdown.set(5);
+    this.upNextTimer = setInterval(() => {
+      const remaining = this.upNextCountdown() - 1;
+      if (remaining <= 0) this.playNextNow();
+      else this.upNextCountdown.set(remaining);
+    }, 1000);
+  }
+
+  private attachBunnyPlayer(frame: HTMLIFrameElement, lessonId: string) {
+    const playerjs = (window as any).playerjs;
+    if (!playerjs || this.bunnyPlayer?.elem === frame) return;
+    this.detachBunnyPlayer();
+    try {
+      const player = new playerjs.Player(frame);
+      this.bunnyPlayer = player;
+      this.endHandled = false;
+      player.on('ended', () => this.onLessonEnded(lessonId));
+      // Backup in case "ended" is not delivered: the last timeupdate.
+      player.on('timeupdate', (data: { seconds?: number; duration?: number }) => {
+        const duration = Number(data?.duration) || 0;
+        if (duration > 0 && Number(data?.seconds) >= duration - 0.5) {
+          this.onLessonEnded(lessonId);
+        }
+      });
+      // Replaying after dismissing "Up next" should trigger it again.
+      player.on('play', () => {
+        if (!this.upNext() && !this.courseFinished()) this.endHandled = false;
+      });
+    } catch {
+      this.bunnyPlayer = null; // The video still plays; it just won't auto-advance.
+    }
+  }
+
+  private detachBunnyPlayer() {
+    try {
+      this.bunnyPlayer?.off('ended');
+      this.bunnyPlayer?.off('timeupdate');
+      this.bunnyPlayer?.off('play');
+    } catch {
+      // The iframe may already be gone.
+    }
+    this.bunnyPlayer = null;
+  }
+
+  private loadPlayerJs(): Promise<any> {
+    const w = window as any;
+    if (w.playerjs) return Promise.resolve(w.playerjs);
+    WatchComponent.playerJsLoader ??= new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://assets.mediadelivery.net/playerjs/playerjs-latest.min.js';
+      script.async = true;
+      script.onload = () => resolve(w.playerjs);
+      script.onerror = () => {
+        WatchComponent.playerJsLoader = null;
+        reject(new Error('Player.js could not be loaded.'));
+      };
+      document.head.appendChild(script);
+    });
+    return WatchComponent.playerJsLoader;
   }
 
   private loadLearningData(courseId: string) {
