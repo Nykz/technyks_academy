@@ -110,6 +110,11 @@ export class AdminCommunicationController {
     return this.communicationService.getEmailConfiguration();
   }
 
+  @Post('email-test')
+  sendTestEmail(@Request() req: any) {
+    return this.communicationService.sendTestEmail(req.user);
+  }
+
   @Post('announcements')
   createAnnouncement(
     @Request() req: any,

@@ -15,6 +15,7 @@ import { ContactModule } from './contact/contact.module';
 import { SiteSettingsModule } from './site-settings/site-settings.module';
 import { CommunicationModule } from './communication/communication.module';
 import { TemplatesModule } from './templates/templates.module';
+import { MailModule } from './mail/mail.service';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { TemplatesModule } from './templates/templates.module';
       },
     ]),
     PrismaModule,
+    MailModule,
     AuthModule,
     CoursesModule,
     PaymentsModule,

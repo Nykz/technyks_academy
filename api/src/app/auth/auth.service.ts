@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService, emailLayout, escapeHtml } from '../mail/mail.service';
 
 const LEARNER_GOALS = new Set([
   'learn-from-scratch',
@@ -33,6 +34,7 @@ export class AuthService implements OnModuleInit {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private config: ConfigService = new ConfigService(),
+    private mail: MailService = new MailService(config),
   ) {}
 
   async onModuleInit() {
@@ -431,45 +433,27 @@ export class AuthService implements OnModuleInit {
     name: string,
     resetToken: string,
   ) {
-    const apiKey = String(this.config.get('RESEND_API_KEY') || '').trim();
-    const from = String(this.config.get('MAIL_FROM') || '').trim();
-    const webAppUrl = String(
-      this.config.get('WEB_APP_URL') || 'https://courses.codingtechnyks.com',
-    ).replace(/\/$/, '');
-    if (!apiKey || !from) {
-      this.logger.warn(
-        'Password reset requested, but RESEND_API_KEY or MAIL_FROM is not configured.',
-      );
-      return;
-    }
-    const resetUrl = `${webAppUrl}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from,
-          to: [email],
-          subject: 'Reset your Technyks Academy password',
-          text:
-            `Hello ${String(name || 'learner').trim()},\n\n` +
-            `Use this secure link to reset your password within 30 minutes:\n${resetUrl}\n\n` +
-            'If you did not request this, you can ignore this email.',
-        }),
-      });
-      if (!response.ok) {
-        this.logger.error(
-          `Password reset email provider returned ${response.status}.`,
-        );
-      }
-    } catch (error: any) {
-      this.logger.error(
-        `Password reset email could not be sent: ${error?.message || 'unknown error'}`,
-      );
-    }
+    const resetUrl = `${this.mail.webAppUrl}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
+    const greetingName = String(name || 'learner').trim();
+    await this.mail.send({
+      to: [email],
+      subject: 'Reset your Technyks Academy password',
+      text:
+        `Hello ${greetingName},
+
+` +
+        `Use this secure link to reset your password within 30 minutes:
+${resetUrl}
+
+` +
+        'If you did not request this, you can ignore this email.',
+      html: emailLayout(
+        'Reset your password',
+        `<p>Hello ${escapeHtml(greetingName)},</p><p>Use the button below to choose a new password. The link works for 30 minutes.</p>`,
+        { label: 'Reset password', url: resetUrl },
+        'If you did not request this, you can ignore this email. Your password stays the same.',
+      ),
+    });
   }
 
   private toPublicUser(user: any) {

@@ -158,7 +158,7 @@ async function bootstrap() {
   }));
   app.use(urlencoded({ extended: true, limit: '16mb' }));
   const allowedOrigins = String(
-    process.env.CORS_ORIGINS || 'https://courses.codingtechnyks.com',
+    process.env.CORS_ORIGINS || 'https://technyks.com,https://www.technyks.com',
   )
     .split(',')
     .map((origin) => origin.trim())

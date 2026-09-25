@@ -3,10 +3,12 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService, emailLayout } from '../mail/mail.service';
 
 type Actor = {
   id: string;
@@ -20,6 +22,7 @@ export class CommunicationService {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
+    @Optional() private mail?: MailService,
   ) {}
 
   async listQuestions(actor: Actor, courseId: string, lessonId?: string) {
@@ -291,12 +294,29 @@ export class CommunicationService {
       from: from || null,
       replyTo: replyTo || null,
       sendingDomain: domainMatch?.[1] || null,
+      contactInbox: this.mail?.contactInbox || null,
       requirements: [
         'Verify the sending domain in Resend.',
         'Publish SPF, DKIM, and DMARC records in DNS.',
         'Use a monitored reply-to address and never buy email lists.',
       ],
     };
+  }
+
+  /** Sends a test email to the signed-in admin and reports Resend's answer. */
+  async sendTestEmail(admin: { email?: string; name?: string }) {
+    if (!this.mail) throw new BadRequestException('Email is not available.');
+    if (!admin?.email) throw new BadRequestException('Your account has no email address.');
+    const result = await this.mail.sendWithReason({
+      to: [admin.email],
+      subject: 'Technyks Academy test email',
+      text: 'Email delivery from technyks.com is working. Password resets, announcements and contact-form notifications will be sent the same way.',
+      html: emailLayout(
+        'Email is working',
+        '<p>Email delivery from technyks.com is working. Password resets, announcements and contact-form notifications will be sent the same way.</p>',
+      ),
+    });
+    return { sent: result.ok, to: admin.email, reason: result.reason || null };
   }
 
   private async readQuestions(): Promise<any[]> {
@@ -530,7 +550,7 @@ export class CommunicationService {
     const from = String(this.config.get('MAIL_FROM') || '').trim();
     const replyTo = String(this.config.get('MAIL_REPLY_TO') || '').trim();
     const appUrl = String(
-      this.config.get('WEB_APP_URL') || 'https://courses.codingtechnyks.com',
+      this.config.get('WEB_APP_URL') || 'https://technyks.com',
     ).replace(/\/$/, '');
     if (!apiKey || !from) return 'NOT_CONFIGURED';
     try {

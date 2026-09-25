@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService, emailLayout, escapeHtml } from '../mail/mail.service';
 
 export interface ContactSubmission {
   name?: string;
@@ -10,7 +11,10 @@ export interface ContactSubmission {
 
 @Injectable()
 export class ContactService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly mail?: MailService,
+  ) {}
 
   async createMessage(submission: ContactSubmission) {
     const name = String(submission.name || '').trim();
@@ -35,6 +39,7 @@ export class ContactService {
     if (this.prisma.isDbConnected) {
       try {
         const saved = await this.prisma.contactMessage.create({ data });
+        this.notifyTeam(data);
         return {
           success: true,
           message: 'Thanks — your message has been sent to the Technyks Academy team.',
@@ -53,10 +58,40 @@ export class ContactService {
       updatedAt: new Date(),
     };
     this.prisma.inMemoryContactMessages.unshift(record);
+    this.notifyTeam(data);
     return {
       success: true,
       message: 'Thanks — your message has been sent to the Technyks Academy team.',
       id: record.id,
     };
+  }
+
+  /**
+   * Emails the message to the team inbox (CONTACT_NOTIFY_EMAIL, else
+   * MAIL_REPLY_TO) with Reply-To set to the visitor, so replying from the
+   * mailbox answers them directly. Fire-and-forget: the visitor's
+   * submission is already saved and never waits on email delivery.
+   */
+  private notifyTeam(data: { name: string; email: string; subject: string; message: string }) {
+    if (!this.mail?.isConfigured() || !this.mail.contactInbox) return;
+    void this.mail.send({
+      to: [this.mail.contactInbox],
+      replyTo: data.email,
+      subject: `[Contact] ${data.subject}`,
+      text: `New message from the technyks.com contact form
+
+From: ${data.name} <${data.email}>
+Subject: ${data.subject}
+
+${data.message}
+
+Reply to this email to answer ${data.name} directly.`,
+      html: emailLayout(
+        'New contact form message',
+        `<p><strong>From:</strong> ${escapeHtml(data.name)} &lt;${escapeHtml(data.email)}&gt;<br><strong>Subject:</strong> ${escapeHtml(data.subject)}</p><p style="white-space:pre-wrap;background:#f4f7fb;border-radius:8px;padding:14px 16px">${escapeHtml(data.message)}</p>`,
+        undefined,
+        `Reply to this email to answer ${data.name} directly.`,
+      ),
+    });
   }
 }

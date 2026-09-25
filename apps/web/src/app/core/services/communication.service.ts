@@ -51,6 +51,7 @@ export interface EmailConfiguration {
   from: string | null;
   replyTo: string | null;
   sendingDomain: string | null;
+  contactInbox?: string | null;
   requirements: string[];
 }
 
@@ -130,6 +131,13 @@ export class CommunicationService {
   getAdminAnnouncements() {
     return this.http.get<CourseAnnouncement[]>(
       '/api/admin/communication/announcements',
+    );
+  }
+
+  sendTestEmail() {
+    return this.http.post<{ sent: boolean; to: string; reason: string | null }>(
+      '/api/admin/communication/email-test',
+      {},
     );
   }
 

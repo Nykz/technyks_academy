@@ -300,6 +300,28 @@ import {
                 <li class="rounded-lg bg-white/70 px-3 py-2">{{ $index + 1 }}. {{ requirement }}</li>
               }
             </ol>
+          } @else {
+            <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                (click)="sendTestEmail()"
+                [disabled]="isSendingTestEmail()"
+                class="w-fit rounded-lg bg-[#2563EB] px-4 py-2 font-['JetBrains_Mono'] text-[11px] font-bold uppercase !text-white hover:bg-[#1D4ED8] disabled:opacity-60"
+              >
+                {{ isSendingTestEmail() ? 'Sending…' : 'Send test email to me' }}
+              </button>
+              <p class="text-xs text-slate-700">
+                Replies go to {{ emailConfiguration()?.replyTo || emailConfiguration()?.from }}
+                @if (emailConfiguration()?.contactInbox) {
+                  · Contact form messages go to {{ emailConfiguration()?.contactInbox }}
+                }
+              </p>
+            </div>
+            @if (testEmailResult(); as result) {
+              <p class="mt-3 text-sm font-semibold" [class.text-emerald-700]="result.ok" [class.text-red-700]="!result.ok" role="status">
+                {{ result.message }}
+              </p>
+            }
           }
         </div>
         <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -500,6 +522,8 @@ export class AdminCommunicationComponent implements OnInit {
   questions = signal<CourseQuestion[]>([]);
   announcements = signal<CourseAnnouncement[]>([]);
   emailConfiguration = signal<EmailConfiguration | null>(null);
+  isSendingTestEmail = signal(false);
+  testEmailResult = signal<{ ok: boolean; message: string } | null>(null);
   isLoadingQuestions = signal(true);
   questionSearch = '';
   questionCourseId = '';
@@ -520,6 +544,28 @@ export class AdminCommunicationComponent implements OnInit {
     this.communicationService
       .getEmailConfiguration()
       .subscribe((configuration) => this.emailConfiguration.set(configuration));
+  }
+
+  sendTestEmail() {
+    this.isSendingTestEmail.set(true);
+    this.testEmailResult.set(null);
+    this.communicationService.sendTestEmail().subscribe({
+      next: (result) => {
+        this.isSendingTestEmail.set(false);
+        this.testEmailResult.set(
+          result.sent
+            ? { ok: true, message: `Test email sent to ${result.to}. Check the inbox (and spam folder).` }
+            : { ok: false, message: `Not sent: ${result.reason || 'unknown error'}` },
+        );
+      },
+      error: (error) => {
+        this.isSendingTestEmail.set(false);
+        this.testEmailResult.set({
+          ok: false,
+          message: error?.error?.message || 'The test email could not be sent.',
+        });
+      },
+    });
   }
 
   loadQuestions() {
