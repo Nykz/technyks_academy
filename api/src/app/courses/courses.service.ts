@@ -312,11 +312,16 @@ export class CoursesService implements OnModuleInit {
       .map((course) => this.toPublicCourse(course));
   }
 
-  async findBySlug(slug: string, byId = false) {
+  /** includeDrafts lets an admin open an unpublished course to review it. */
+  async findBySlug(slug: string, byId = false, includeDrafts = false) {
     if (this.prisma.isDbConnected) {
       try {
         const course = await this.prisma.course.findFirst({
-          where: { ...(byId ? { id: slug } : { slug }), isPublished: true, isArchived: false },
+          where: {
+            ...(byId ? { id: slug } : { slug }),
+            ...(includeDrafts ? {} : { isPublished: true }),
+            isArchived: false,
+          },
           include: {
             modules: {
               include: {
@@ -350,7 +355,10 @@ export class CoursesService implements OnModuleInit {
     }
 
     const found = this.prisma.inMemoryCourses.find(
-      (c) => (byId ? c.id === slug : c.slug === slug) && c.isPublished && !c.isArchived,
+      (c) =>
+        (byId ? c.id === slug : c.slug === slug) &&
+        (includeDrafts || c.isPublished) &&
+        !c.isArchived,
     );
     if (!found) {
       throw new NotFoundException(`Course with slug "${slug}" not found.`);

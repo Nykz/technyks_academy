@@ -40,7 +40,7 @@ function readEnv() {
 }
 
 function parseArgs(argv) {
-  const result = { apply: false, replace: false, create: false, api: '' };
+  const result = { apply: false, replace: false, create: false, api: '', price: null };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     // pnpm forwards the separator itself on some Windows installations.
@@ -51,6 +51,10 @@ function parseArgs(argv) {
     else if (value === '--source') result.source = argv[++index];
     else if (value === '--course') result.course = argv[++index];
     else if (value === '--api') result.api = argv[++index];
+    else if (value === '--price') {
+      result.price = Number(argv[++index]);
+      if (!Number.isFinite(result.price) || result.price < 0) die('--price must be a number such as 499 (INR).');
+    }
     else if (value === '--help' || value === '-h') result.help = true;
     else die(`Unknown option: ${value}`);
   }
@@ -86,13 +90,20 @@ stopped import does not upload the same videos again.
 function stripOrderingPrefix(value) {
   return value
     .replace(/^\s*(?:\d+[._ -]*)+/, '')
-    .replace(/[_-]+/g, ' ')
+    .replace(/_+/g, ' ')
+    // "my-lesson-name" style names become words; real titles keep their
+    // hyphens ("Mid-Build", "Pre-Launch").
+    .replace(/^\S*$/, (name) => name.replace(/-+/g, ' '))
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-function titleFromFilename(filename) {
-  return stripOrderingPrefix(path.basename(filename, path.extname(filename))) || 'Untitled lecture';
+function titleFromFilename(filename, moduleTitle) {
+  const title = stripOrderingPrefix(path.basename(filename, path.extname(filename)));
+  if (title) return title;
+  // Files named only "1.mp4", "2.mp4"… inherit their module's name.
+  const part = (path.basename(filename, path.extname(filename)).match(/\d+/) || [''])[0];
+  return moduleTitle ? `${moduleTitle}${part ? ` — Part ${part}` : ''}` : 'Untitled lecture';
 }
 
 function naturalSort(items) {
@@ -120,7 +131,7 @@ function coursePlan(source) {
 
   const rootVideos = readVideoFiles(source);
   if (rootVideos.length > 0) {
-    modules.unshift({ title: 'Course content', folder: '', videos: rootVideos });
+    modules.unshift({ title: 'Introduction', folder: '', videos: rootVideos });
   }
   return modules;
 }
@@ -202,7 +213,19 @@ async function uploadToBunny(env, localPath, title) {
   return videoId;
 }
 
-function basicCoursePayload(title, modules) {
+async function bunnyVideoLength(env, videoId) {
+  try {
+    const video = await request(
+      `https://video.bunnycdn.com/library/${encodeURIComponent(env.BUNNY_STREAM_LIBRARY_ID)}/videos/${encodeURIComponent(videoId)}`,
+      { headers: { AccessKey: env.BUNNY_STREAM_API_KEY, accept: 'application/json' } },
+    );
+    return Math.max(0, Math.round(Number(video?.length) || 0));
+  } catch (error) {
+    die(`Bunny video ${videoId} could not be read (${error.message}). It may have been deleted; remove its entry from ${MANIFEST_FILE} to upload it again.`);
+  }
+}
+
+function basicCoursePayload(title, modules, price) {
   const slug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -212,8 +235,8 @@ function basicCoursePayload(title, modules) {
     title,
     subtitle: 'Course curriculum imported from a local folder.',
     description: 'Draft course. Complete the landing page details, thumbnail, price, and publishing settings in the admin panel before making it live.',
-    price: 0,
-    isFree: true,
+    price: price ?? 0,
+    isFree: price === 0,
     currency: 'INR',
     level: 'All Levels',
     category: 'Web Development',
@@ -239,7 +262,10 @@ async function main() {
 
   console.log(`\nCourse folder: ${path.basename(source)}`);
   console.log(`Modules: ${modules.length} | Videos: ${lectureCount}`);
-  for (const module of modules) console.log(`  • ${module.title}: ${module.videos.length} video(s)`);
+  for (const module of modules) {
+    console.log(`  • ${module.title}: ${module.videos.length} video(s)`);
+    for (const filename of module.videos) console.log(`      - ${titleFromFilename(filename, module.title)}`);
+  }
   if (!args.apply) {
     console.log('\nPreview only — no video or course was changed. Add --apply when you are ready.');
     return;
@@ -255,9 +281,13 @@ async function main() {
   if (course && !args.replace) die('For safety, an existing course requires --replace-curriculum. Do not use this on a live course with students.');
 
   const manifest = loadManifest(source);
+  if (manifest.libraryId && String(manifest.libraryId) !== String(env.BUNNY_STREAM_LIBRARY_ID)) {
+    die(`${MANIFEST_FILE} records uploads to Bunny library ${manifest.libraryId}, but .env points at ${env.BUNNY_STREAM_LIBRARY_ID}. Those video IDs would not play. Rename the manifest to upload again into the new library.`);
+  }
   manifest.libraryId = env.BUNNY_STREAM_LIBRARY_ID;
   const importedModules = [];
   let completed = 0;
+  let uploaded = 0;
   for (const [moduleIndex, module] of modules.entries()) {
     const lessons = [];
     for (const [lessonIndex, filename] of module.videos.entries()) {
@@ -267,15 +297,18 @@ async function main() {
         console.log(`Reusing uploaded video: ${relative}`);
       } else {
         console.log(`Uploading ${completed + 1}/${lectureCount}: ${relative}`);
-        bunnyVideoId = await uploadToBunny(env, path.join(source, module.folder, filename), titleFromFilename(filename));
-        manifest.videos[relative] = { videoId: bunnyVideoId, title: titleFromFilename(filename), uploadedAt: new Date().toISOString() };
+        bunnyVideoId = await uploadToBunny(env, path.join(source, module.folder, filename), titleFromFilename(filename, module.title));
+        manifest.videos[relative] = { videoId: bunnyVideoId, title: titleFromFilename(filename, module.title), uploadedAt: new Date().toISOString() };
         saveManifest(source, manifest);
+        uploaded += 1;
       }
       completed += 1;
       lessons.push({
-        title: titleFromFilename(filename),
+        title: titleFromFilename(filename, module.title),
         description: null,
-        duration: 0,
+        // Seconds, as the admin editor and course page expect. Freshly
+        // uploaded videos report 0 until Bunny finishes encoding them.
+        duration: await bunnyVideoLength(env, bunnyVideoId),
         order: lessonIndex + 1,
         isFreePreview: moduleIndex === 0 && lessonIndex === 0,
         videoAssetRef: bunnyVideoId,
@@ -287,7 +320,7 @@ async function main() {
   if (!course) {
     course = await apiRequest(api, token, '/admin/courses', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(basicCoursePayload(path.basename(source), importedModules)),
+      body: JSON.stringify(basicCoursePayload(stripOrderingPrefix(path.basename(source)) || path.basename(source), importedModules, args.price)),
     });
   } else {
     const payload = {
@@ -301,7 +334,7 @@ async function main() {
     });
   }
 
-  console.log(`\n✓ Imported ${lectureCount} videos into Bunny and saved them to course "${course.title}".`);
+  console.log(`\n✓ Saved ${lectureCount} lessons to course "${course.title}" (${uploaded} newly uploaded to Bunny, ${lectureCount - uploaded} already there).`);
   console.log('The course is kept unpublished. Review its details in Admin before publishing.');
 }
 

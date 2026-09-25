@@ -15,7 +15,11 @@ export class VideoService {
     private config: ConfigService,
   ) {}
 
-  async generateSignedPlaybackToken(userId: string | null, lessonId: string) {
+  async generateSignedPlaybackToken(
+    userId: string | null,
+    lessonId: string,
+    isAdmin = false,
+  ) {
     let lesson: any = null;
     let usingDatabase = false;
 
@@ -50,8 +54,10 @@ export class VideoService {
       throw new NotFoundException('Lesson not found.');
     }
 
-    // Check authorization: Free Preview OR Enrolled OR Active Subscription
-    if (!lesson.isFreePreview) {
+    // Check authorization: Free Preview OR Admin (reviewing unpublished
+    // courses) OR Enrolled OR Active Subscription. The admin role comes from
+    // the database via JwtStrategy.validate, not from the token claims.
+    if (!lesson.isFreePreview && !isAdmin) {
       if (!userId) {
         throw new ForbiddenException(
           'Authentication required to view this paid lesson.',

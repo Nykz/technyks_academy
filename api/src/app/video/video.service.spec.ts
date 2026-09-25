@@ -42,3 +42,48 @@ describe('VideoService - YouTube Membership playback', () => {
     expect(result.embedUrl).not.toContain('playlist');
   });
 });
+
+describe('VideoService - paid lesson access', () => {
+  const makeService = () =>
+    new VideoService(
+      {
+        isDbConnected: false,
+        inMemoryCourses: [
+          {
+            id: 'course-draft',
+            modules: [
+              {
+                lessons: [
+                  {
+                    id: 'paid-lesson',
+                    title: 'Paid lesson',
+                    isFreePreview: false,
+                    videoAssetRef: 'youtube:qz3dH9RdvoM',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        inMemoryEnrollments: [],
+        inMemorySubscriptions: [],
+        inMemoryMembershipPlans: [],
+      } as any,
+      { get: vi.fn() } as any,
+    );
+
+  it('blocks a signed-in student who is not enrolled', async () => {
+    await expect(
+      makeService().generateSignedPlaybackToken('student-1', 'paid-lesson'),
+    ).rejects.toThrow('You must enroll');
+  });
+
+  it('lets an admin review a paid lesson without enrolling', async () => {
+    const result = await makeService().generateSignedPlaybackToken(
+      'admin-1',
+      'paid-lesson',
+      true,
+    );
+    expect(result.videoAvailable).toBe(true);
+  });
+});

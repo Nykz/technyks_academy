@@ -9,6 +9,10 @@ export class VideoController {
   @UseGuards(OptionalJwtAuthGuard)
   @Get('token/:lessonId')
   async getSignedPlaybackToken(@Request() req: any, @Param('lessonId') lessonId: string) {
-    return this.videoService.generateSignedPlaybackToken(req.user?.id || null, lessonId);
+    return this.videoService.generateSignedPlaybackToken(
+      req.user?.id || null,
+      lessonId,
+      req.user?.role === 'ADMIN',
+    );
   }
 }

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { ReviewsService } from './reviews.service';
-import { JwtAuthGuard } from '../auth/guards';
+import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/guards';
 
 @Controller('courses')
 export class CoursesController {
@@ -15,14 +15,17 @@ export class CoursesController {
     return this.coursesService.findAllPublished();
   }
 
+  // Admins may open unpublished (draft) courses to review them.
+  @UseGuards(OptionalJwtAuthGuard)
   @Get('by-id/:id')
-  async getCourseById(@Param('id') id: string) {
-    return this.coursesService.findBySlug(id, true);
+  async getCourseById(@Request() req: any, @Param('id') id: string) {
+    return this.coursesService.findBySlug(id, true, req.user?.role === 'ADMIN');
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':slug')
-  async getCourseBySlug(@Param('slug') slug: string) {
-    return this.coursesService.findBySlug(slug);
+  async getCourseBySlug(@Request() req: any, @Param('slug') slug: string) {
+    return this.coursesService.findBySlug(slug, false, req.user?.role === 'ADMIN');
   }
 
   @Get(':slug/reviews')
