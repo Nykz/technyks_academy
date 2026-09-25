@@ -1,5 +1,6 @@
 import { Global, Injectable, Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { createTransport, type Transporter } from 'nodemailer';
 
 export function escapeHtml(value: string) {
   return String(value ?? '')
@@ -36,53 +37,81 @@ export interface OutgoingEmail {
 }
 
 /**
- * Sends transactional email through Resend (https://resend.com).
+ * Sends the site's email through one of two providers, picked from env:
  *
- * Required: RESEND_API_KEY and MAIL_FROM, e.g.
- *   MAIL_FROM="Technyks Academy <contact@technyks.com>"
- * Optional: MAIL_REPLY_TO (where student replies go) and
- * CONTACT_NOTIFY_EMAIL (who receives contact-form messages; defaults to
- * MAIL_REPLY_TO, then the MAIL_FROM address).
+ * 1. SMTP, e.g. the Hostinger mailbox (used when SMTP_HOST, SMTP_USER and
+ *    SMTP_PASSWORD are set):
+ *      SMTP_HOST=smtp.hostinger.com  SMTP_PORT=465
+ *      SMTP_USER=contact@technyks.com  SMTP_PASSWORD=<mailbox password>
+ * 2. Resend (used when RESEND_API_KEY is set and SMTP is not).
+ *
+ * MAIL_FROM is the sender, e.g. "Technyks Academy <contact@technyks.com>";
+ * with SMTP it defaults to the mailbox. Optional: MAIL_REPLY_TO (where
+ * replies go) and CONTACT_NOTIFY_EMAIL (who receives contact-form messages;
+ * defaults to MAIL_REPLY_TO, then the sender address).
  */
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
+  private transporter: Transporter | null = null;
 
   constructor(private readonly config: ConfigService = new ConfigService()) {}
 
+  private env(key: string) {
+    return String(this.config.get(key) || '').trim();
+  }
+
   get apiKey() {
-    return String(this.config.get('RESEND_API_KEY') || '').trim();
+    return this.env('RESEND_API_KEY');
+  }
+
+  private get smtp() {
+    const host = this.env('SMTP_HOST');
+    const user = this.env('SMTP_USER');
+    const password = this.env('SMTP_PASSWORD');
+    if (!host || !user || !password) return null;
+    const port = Number(this.env('SMTP_PORT')) || 465;
+    const secureSetting = this.env('SMTP_SECURE').toLowerCase();
+    const secure = secureSetting ? secureSetting === 'true' : port === 465;
+    return { host, port, secure, user, password };
+  }
+
+  /** "SMTP", "Resend", or null when nothing is configured. */
+  get provider(): 'SMTP' | 'Resend' | null {
+    if (this.smtp) return 'SMTP';
+    if (this.apiKey) return 'Resend';
+    return null;
   }
 
   get from() {
-    return String(this.config.get('MAIL_FROM') || '').trim();
+    const configured = this.env('MAIL_FROM');
+    if (configured) return configured;
+    const smtpUser = this.smtp?.user;
+    return smtpUser ? `Technyks Academy <${smtpUser}>` : '';
   }
 
   get replyTo() {
-    return String(this.config.get('MAIL_REPLY_TO') || '').trim();
+    return this.env('MAIL_REPLY_TO');
   }
 
   get webAppUrl() {
-    return String(this.config.get('WEB_APP_URL') || 'https://technyks.com')
-      .trim()
-      .replace(/\/$/, '');
+    return (this.env('WEB_APP_URL') || 'https://technyks.com').replace(/\/$/, '');
   }
 
   /** Address that receives contact-form notifications. */
   get contactInbox() {
-    const explicit = String(this.config.get('CONTACT_NOTIFY_EMAIL') || '').trim();
     const fromAddress = this.from.match(/<([^>]+)>/)?.[1] || this.from;
-    return explicit || this.replyTo || fromAddress;
+    return this.env('CONTACT_NOTIFY_EMAIL') || this.replyTo || fromAddress;
   }
 
   isConfigured() {
-    return Boolean(this.apiKey && this.from);
+    return Boolean(this.provider && this.from);
   }
 
   /**
-   * Returns true when Resend accepted the message. Never throws, so a mail
-   * outage cannot break the request that triggered it; failures are logged
-   * with Resend's reason.
+   * Returns true when the provider accepted the message. Never throws, so a
+   * mail outage cannot break the request that triggered it; failures are
+   * logged with the provider's reason.
    */
   async send(email: OutgoingEmail): Promise<boolean> {
     const result = await this.sendWithReason(email);
@@ -93,11 +122,52 @@ export class MailService {
     email: OutgoingEmail,
   ): Promise<{ ok: boolean; reason?: string }> {
     if (!this.isConfigured()) {
-      this.logger.warn(
-        `Email "${email.subject}" not sent: RESEND_API_KEY or MAIL_FROM is not configured.`,
-      );
-      return { ok: false, reason: 'RESEND_API_KEY or MAIL_FROM is not configured.' };
+      const reason =
+        'Email is not configured. Set SMTP_HOST, SMTP_USER and SMTP_PASSWORD (Hostinger mailbox) or RESEND_API_KEY and MAIL_FROM.';
+      this.logger.warn(`Email "${email.subject}" not sent. ${reason}`);
+      return { ok: false, reason };
     }
+    const result =
+      this.provider === 'SMTP'
+        ? await this.sendViaSmtp(email)
+        : await this.sendViaResend(email);
+    if (!result.ok) {
+      this.logger.error(`Email "${email.subject}" failed via ${this.provider}: ${result.reason}`);
+    }
+    return result;
+  }
+
+  private async sendViaSmtp(email: OutgoingEmail) {
+    const smtp = this.smtp!;
+    this.transporter ??= createTransport({
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      auth: { user: smtp.user, pass: smtp.password },
+      pool: true,
+      maxConnections: 2,
+    });
+    const replyTo = email.replyTo || this.replyTo;
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to: email.to,
+        subject: email.subject,
+        text: email.text,
+        ...(email.html ? { html: email.html } : {}),
+        ...(replyTo ? { replyTo } : {}),
+      });
+      return { ok: true };
+    } catch (error: any) {
+      // Drop the pooled connection so changed credentials take effect.
+      this.transporter?.close();
+      this.transporter = null;
+      const code = error?.responseCode ? ` (${error.responseCode})` : '';
+      return { ok: false, reason: `SMTP error${code}: ${error?.response || error?.message || 'unknown error'}` };
+    }
+  }
+
+  private async sendViaResend(email: OutgoingEmail) {
     const replyTo = email.replyTo || this.replyTo;
     try {
       const response = await fetch('https://api.resend.com/emails', {
@@ -117,13 +187,9 @@ export class MailService {
       });
       if (response.ok) return { ok: true };
       const detail = await response.text().catch(() => '');
-      const reason = `Resend returned ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ''}`;
-      this.logger.error(`Email "${email.subject}" failed. ${reason}`);
-      return { ok: false, reason };
+      return { ok: false, reason: `Resend returned ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ''}` };
     } catch (error: any) {
-      const reason = error?.message || 'network error';
-      this.logger.error(`Email "${email.subject}" failed: ${reason}`);
-      return { ok: false, reason };
+      return { ok: false, reason: error?.message || 'network error' };
     }
   }
 }

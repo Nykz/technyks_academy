@@ -667,12 +667,14 @@ export class AdminCommunicationComponent implements OnInit {
           this.announcementBody = '';
           this.isPublishingAnnouncement.set(false);
           this.announcementFeedback.set(
-            announcement.emailStatus === 'SENT'
-              ? `Published and emailed to ${announcement.recipientCount} students.`
-              : announcement.sendEmail &&
-                  announcement.emailStatus === 'NOT_CONFIGURED'
-                ? `Published in the LMS for ${announcement.recipientCount} students. Add RESEND_API_KEY and MAIL_FROM to activate email delivery.`
-                : `Published in the LMS for ${announcement.recipientCount} students.`,
+            announcement.sendEmail && announcement.emailStatus === 'SENDING'
+              ? `Published. Emailing ${announcement.recipientCount} students in the background; refresh this page to see when the status changes to SENT.`
+              : announcement.emailStatus === 'SENT'
+                ? `Published and emailed to ${announcement.recipientCount} students.`
+                : announcement.sendEmail &&
+                    announcement.emailStatus === 'NOT_CONFIGURED'
+                  ? `Published in the LMS for ${announcement.recipientCount} students. Email is not connected yet, so no emails were sent.`
+                  : `Published in the LMS for ${announcement.recipientCount} students.`,
           );
         },
         error: (error) => {

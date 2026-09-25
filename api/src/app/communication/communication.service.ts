@@ -19,11 +19,15 @@ type Actor = {
 
 @Injectable()
 export class CommunicationService {
+  private mail: MailService;
+
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
-    @Optional() private mail?: MailService,
-  ) {}
+    @Optional() mail?: MailService,
+  ) {
+    this.mail = mail ?? new MailService(config);
+  }
 
   async listQuestions(actor: Actor, courseId: string, lessonId?: string) {
     await this.assertCourseAccess(actor, courseId);
@@ -250,14 +254,23 @@ export class CommunicationService {
       this.prisma.inMemoryCourseAnnouncements.unshift(record);
     }
 
-    if (sendEmail) {
-      emailStatus = await this.sendAnnouncementEmail(
+    const emailReady = this.mail
+      ? this.mail.isConfigured()
+      : Boolean(this.config.get('RESEND_API_KEY') && this.config.get('MAIL_FROM'));
+    if (sendEmail && (!emailReady || !recipients.length)) {
+      await this.setAnnouncementEmailStatus(
         id,
-        title,
-        body,
-        recipients,
+        emailReady ? 'NO_RECIPIENTS' : 'NOT_CONFIGURED',
       );
-      await this.setAnnouncementEmailStatus(id, emailStatus);
+    } else if (sendEmail) {
+      // Delivery can take minutes for a large class, longer than the host
+      // lets one request run, so it continues in the background and the
+      // admin list shows SENDING until the final status is saved.
+      await this.setAnnouncementEmailStatus(id, 'SENDING');
+      void this.sendAnnouncementEmail(id, title, body, recipients)
+        .catch(() => 'FAILED')
+        .then((status) => this.setAnnouncementEmailStatus(id, status))
+        .catch(() => undefined);
     }
     return (await this.readAnnouncements()).find(
       (announcement) => announcement.id === id,
@@ -284,21 +297,20 @@ export class CommunicationService {
   }
 
   getEmailConfiguration() {
-    const apiKey = String(this.config.get('RESEND_API_KEY') || '').trim();
-    const from = String(this.config.get('MAIL_FROM') || '').trim();
-    const replyTo = String(this.config.get('MAIL_REPLY_TO') || '').trim();
+    const provider = this.mail?.provider || null;
+    const from = this.mail?.from || '';
     const domainMatch = from.match(/@([^>\s]+)>?$/);
     return {
-      provider: 'Resend',
-      configured: Boolean(apiKey && from),
+      provider: provider || 'Not connected',
+      configured: Boolean(this.mail?.isConfigured()),
       from: from || null,
-      replyTo: replyTo || null,
+      replyTo: this.mail?.replyTo || null,
       sendingDomain: domainMatch?.[1] || null,
       contactInbox: this.mail?.contactInbox || null,
       requirements: [
-        'Verify the sending domain in Resend.',
-        'Publish SPF, DKIM, and DMARC records in DNS.',
-        'Use a monitored reply-to address and never buy email lists.',
+        'Hostinger mailbox: set SMTP_HOST=smtp.hostinger.com, SMTP_PORT=465, SMTP_USER and SMTP_PASSWORD.',
+        'Or Resend: verify the domain and set RESEND_API_KEY and MAIL_FROM.',
+        'Redeploy the API, then send a test email from this page.',
       ],
     };
   }
@@ -552,6 +564,10 @@ export class CommunicationService {
     const appUrl = String(
       this.config.get('WEB_APP_URL') || 'https://technyks.com',
     ).replace(/\/$/, '');
+    if (this.mail?.provider === 'SMTP') {
+      if (!this.mail.isConfigured()) return 'NOT_CONFIGURED';
+      return this.sendAnnouncementViaSmtp(title, body, recipients, appUrl);
+    }
     if (!apiKey || !from) return 'NOT_CONFIGURED';
     try {
       for (let index = 0; index < recipients.length; index += 50) {
@@ -585,6 +601,37 @@ export class CommunicationService {
     } catch {
       return 'FAILED';
     }
+  }
+
+  /**
+   * One individually addressed email per student through the mailbox (so no
+   * student sees another's address), sent one at a time to stay inside the
+   * host's hourly limit. PARTIAL means some addresses were rejected.
+   */
+  private async sendAnnouncementViaSmtp(
+    title: string,
+    body: string,
+    recipients: { email: string; name?: string }[],
+    appUrl: string,
+  ) {
+    let sent = 0;
+    for (const recipient of recipients) {
+      const greeting = recipient.name ? `Hello ${this.escapeHtml(recipient.name)},` : 'Hello,';
+      const ok = await this.mail!.send({
+        to: [recipient.email],
+        subject: title,
+        text: `${recipient.name ? `Hello ${recipient.name},\n\n` : ''}${body}\n\nOpen your learning dashboard: ${appUrl}/dashboard\n\nTechnyks Academy`,
+        html: emailLayout(
+          title,
+          `<p>${greeting}</p><p>${this.escapeHtml(body).replace(/\n/g, '<br>')}</p>`,
+          { label: 'Open learning dashboard', url: `${appUrl}/dashboard` },
+          'You received this update because this email is enrolled in a Technyks Academy course. Reply to this email if you need help.',
+        ),
+      });
+      if (ok) sent += 1;
+    }
+    if (sent === recipients.length) return 'SENT';
+    return sent === 0 ? 'FAILED' : 'PARTIAL';
   }
 
   private async setAnnouncementEmailStatus(id: string, emailStatus: string) {

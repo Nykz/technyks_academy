@@ -38,7 +38,9 @@ export interface CourseAnnouncement {
     | 'SENT'
     | 'FAILED'
     | 'NOT_CONFIGURED'
-    | 'NO_RECIPIENTS';
+    | 'NO_RECIPIENTS'
+    | 'SENDING'
+    | 'PARTIAL';
   recipientCount: number;
   authorName: string;
   createdAt: string;
