@@ -104,7 +104,12 @@ async function bootstrap() {
   // visitor as one caller. Trust exactly one hop so req.ip reflects the
   // real client.
   if (process.env.NODE_ENV === 'production') {
-    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+    // Hostinger's CDN (and possibly another proxy) sits in front of Node.
+    // TRUST_PROXY_HOPS is how many proxies to trust from the right of
+    // X-Forwarded-For; the wrong value makes every visitor share one rate
+    // limit. Check GET /health/client to pick it.
+    const hops = Math.max(0, Math.floor(Number(process.env.TRUST_PROXY_HOPS ?? 1)));
+    app.getHttpAdapter().getInstance().set('trust proxy', hops);
   }
 
   // Uploaded images are kept in the database; serve them first and fall
