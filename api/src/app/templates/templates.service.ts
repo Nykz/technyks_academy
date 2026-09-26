@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
+import { persistentDirectory } from '../storage-paths';
 import { LEGACY_TEMPLATE_CATALOG } from './legacy-template-catalog.data';
 
 @Injectable()
@@ -505,11 +506,10 @@ export class TemplatesService implements OnModuleInit {
   }
 
   private privateDirectory() {
-    return resolve(
-      String(
-        process.env.PRIVATE_UPLOADS_DIR ||
-          join(process.cwd(), 'private_uploads', 'templates'),
-      ).trim(),
+    return persistentDirectory(
+      process.env.PRIVATE_UPLOADS_DIR,
+      'private_uploads',
+      'templates',
     );
   }
 

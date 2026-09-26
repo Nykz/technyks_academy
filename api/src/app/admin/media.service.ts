@@ -5,7 +5,8 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, join } from 'node:path';
+import { persistentDirectory } from '../storage-paths';
 
 const IMAGE_TYPES: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -22,9 +23,7 @@ const VIDEO_TYPES: Record<string, string> = {
 };
 
 export function getUploadsDirectory() {
-  return resolve(
-    String(process.env.UPLOADS_DIR || join(process.cwd(), 'uploads')).trim(),
-  );
+  return persistentDirectory(process.env.UPLOADS_DIR, 'uploads');
 }
 
 @Injectable()

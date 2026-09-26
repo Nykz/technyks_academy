@@ -105,6 +105,7 @@ async function bootstrap() {
 
   const uploadsDirectory = getUploadsDirectory();
   mkdirSync(uploadsDirectory, { recursive: true });
+  Logger.log(`[Startup] Uploaded media is stored in ${uploadsDirectory}`, 'Bootstrap');
   app.useStaticAssets(uploadsDirectory, {
     prefix: '/uploads/',
     index: false,
