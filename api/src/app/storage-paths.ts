@@ -1,3 +1,4 @@
+import { copyFile, rename, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
@@ -31,4 +32,15 @@ export function persistentDirectory(
   }
 
   return resolve(value || join(process.cwd(), ...defaultSegments));
+}
+
+/** Rename, falling back to copy + delete across filesystems. */
+export async function moveFile(from: string, to: string) {
+  try {
+    await rename(from, to);
+  } catch (error: any) {
+    if (error?.code !== 'EXDEV') throw error;
+    await copyFile(from, to);
+    await unlink(from);
+  }
 }

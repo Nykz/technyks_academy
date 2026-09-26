@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { TemplateCartService } from '../../core/services/template-cart.service';
@@ -7,12 +7,15 @@ import {
   TemplatesService,
   UiTemplate,
 } from '../../core/services/templates.service';
-import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
+import {
+  CarouselSlide,
+  TemplateMediaCarouselComponent,
+} from './template-media-carousel.component';
 
 @Component({
   selector: 'app-template-detail',
   standalone: true,
-  imports: [CommonModule, RouterModule, MediaUrlPipe],
+  imports: [CommonModule, RouterModule, TemplateMediaCarouselComponent],
   template: `
     <main
       class="min-h-screen bg-slate-50 px-5 py-12 text-slate-950 dark:bg-[#040810] dark:text-white md:px-12 lg:px-20"
@@ -36,33 +39,10 @@ import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
         } @else if (item()) {
           <div class="mt-8 grid gap-10 lg:grid-cols-[1.4fr_.8fr]">
             <section>
-              <div
-                class="aspect-video overflow-hidden rounded-2xl bg-black shadow-2xl"
-              >
-                @if (isDirectVideo(item()!.promoVideoUrl)) {
-                  <video
-                    [src]="item()!.promoVideoUrl | mediaUrl"
-                    controls
-                    [poster]="(item()!.thumbnail | mediaUrl) || undefined"
-                    class="h-full w-full object-contain"
-                  ></video>
-                } @else if (promoEmbedUrl()) {
-                  <iframe
-                    [src]="promoEmbedUrl()"
-                    [title]="item()!.title + ' promotional video'"
-                    class="h-full w-full border-0"
-                    allow="autoplay; encrypted-media; picture-in-picture"
-                    referrerpolicy="strict-origin-when-cross-origin"
-                    allowfullscreen
-                  ></iframe>
-                } @else if (item()!.thumbnail) {
-                  <img
-                    [src]="item()!.thumbnail | mediaUrl"
-                    [alt]="item()!.title"
-                    class="h-full w-full object-cover"
-                  />
-                }
-              </div>
+              <app-template-media-carousel
+                [slides]="slides()"
+                [label]="item()!.title"
+              />
               <div
                 class="mt-10 rounded-2xl border border-slate-200 bg-white p-7 dark:border-white/10 dark:bg-[#121A2B]"
               >
@@ -171,6 +151,23 @@ export class TemplateDetailComponent implements OnInit {
   loading = signal(true);
   error = signal('');
   promoEmbedUrl = signal<SafeResourceUrl | null>(null);
+  /** Promo video (or thumbnail) first, then every screenshot. */
+  readonly slides = computed<CarouselSlide[]>(() => {
+    const item = this.item();
+    if (!item) return [];
+    const slides: CarouselSlide[] = [];
+    const embed = this.promoEmbedUrl();
+    if (this.isDirectVideo(item.promoVideoUrl)) {
+      slides.push({ kind: 'video', src: item.promoVideoUrl as string, poster: item.thumbnail });
+    } else if (embed) {
+      slides.push({ kind: 'embed', src: embed, title: `${item.title} promotional video` });
+    }
+    if (item.thumbnail) slides.push({ kind: 'image', src: item.thumbnail, alt: item.title });
+    (item.gallery || []).forEach((src, index) =>
+      slides.push({ kind: 'image', src, alt: `${item.title} screen ${index + 1}` }),
+    );
+    return slides;
+  });
   ngOnInit() {
     this.service.get(this.route.snapshot.paramMap.get('slug') || '').subscribe({
       next: (item) => {

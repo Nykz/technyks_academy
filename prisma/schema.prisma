@@ -262,6 +262,8 @@ model UiTemplate {
   deliveryUrl        String?              @db.Text
   downloadButtonText String               @default("Download files")
   buyerMessage       String?              @db.Text
+  // Extra screenshots shown in the product page slideshow (image URLs).
+  gallery            Json?
   isPublished        Boolean              @default(false)
   isFeatured         Boolean              @default(false)
   createdAt          DateTime             @default(now())

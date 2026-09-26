@@ -4,6 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import {
   json,
+  raw,
   urlencoded,
   type NextFunction,
   type Request,
@@ -189,6 +190,8 @@ async function bootstrap() {
       'Bootstrap',
     );
   }
+  // Pieces of large admin uploads arrive as raw bytes (see large-upload.service.ts).
+  app.use('/api/admin/uploads', raw({ type: 'application/octet-stream', limit: '9mb' }));
   app.use(json({
     limit: '16mb',
     verify: (request: Request & { rawBody?: Buffer }, _response, buffer) => {

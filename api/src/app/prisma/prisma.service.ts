@@ -254,6 +254,7 @@ export class PrismaService
       'ADD COLUMN `deliveryUrl` TEXT NULL',
       "ADD COLUMN `downloadButtonText` VARCHAR(80) NOT NULL DEFAULT 'Download files'",
       'ADD COLUMN `buyerMessage` TEXT NULL',
+      'ADD COLUMN `gallery` JSON NULL',
     ];
     for (const addition of additions) {
       try {

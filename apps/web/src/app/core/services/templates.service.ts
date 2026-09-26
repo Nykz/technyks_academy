@@ -15,6 +15,8 @@ export interface UiTemplate {
   currency: string;
   category: string;
   tags: string[];
+  /** Extra screenshots for the product page slideshow. */
+  gallery?: string[];
   isFeatured: boolean;
   fileReady: boolean;
   downloadButtonText?: string | null;

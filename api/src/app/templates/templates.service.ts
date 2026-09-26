@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
-import { persistentDirectory } from '../storage-paths';
+import { moveFile, persistentDirectory } from '../storage-paths';
 import { LEGACY_TEMPLATE_CATALOG } from './legacy-template-catalog.data';
 
 @Injectable()
@@ -220,11 +220,28 @@ export class TemplatesService implements OnModuleInit {
     const storedName = `${id}-${Date.now()}-${randomUUID()}.zip`;
     const path = join(directory, storedName);
     await writeFile(path, file.buffer, { mode: 0o600 });
+    return this.saveProductFile(product, path, file.originalname, size);
+  }
 
+  /**
+   * Attaches a ZIP already on disk (a finished piece-by-piece upload) as the
+   * template's download, moving it into the private folder.
+   */
+  async attachStoredFile(id: string, sourcePath: string, originalName: string, size: number) {
+    const product = await this.findAdmin(id);
+    const directory = this.privateDirectory();
+    await mkdir(directory, { recursive: true });
+    const path = join(directory, `${id}-${Date.now()}-${randomUUID()}.zip`);
+    await moveFile(sourcePath, path);
+    return this.saveProductFile(product, path, originalName, size);
+  }
+
+  private async saveProductFile(product: any, path: string, originalName: string, size: number) {
+    const id = product.id;
     const originalPath = String(product.filePath || '');
     const update = {
       filePath: path,
-      fileName: this.safeDownloadName(file.originalname),
+      fileName: this.safeDownloadName(originalName),
       fileSize: size,
     };
     const saved = this.prisma.isDbConnected
@@ -399,9 +416,22 @@ export class TemplatesService implements OnModuleInit {
         .slice(0, 16),
       category: this.text(input.category || 'Website UI', 'Category', 2, 120),
       tags: [...new Set(tags.map(String).filter(Boolean))].slice(0, 12),
+      gallery: this.cleanGallery(input.gallery),
       isPublished: Boolean(input.isPublished),
       isFeatured: Boolean(input.isFeatured),
     };
+  }
+
+  /** Up to 40 screenshot URLs for the product page slideshow. */
+  private cleanGallery(value: unknown): string[] {
+    const items = Array.isArray(value) ? value : this.parseJson(value, []);
+    if (!Array.isArray(items)) return [];
+    if (items.length > 40) {
+      throw new BadRequestException('Add up to 40 screenshots.');
+    }
+    return items
+      .map((item) => this.optionalMediaUrl(item, 'Screenshot'))
+      .filter((item): item is string => Boolean(item));
   }
 
   private text(value: unknown, label: string, min: number, max: number) {
@@ -469,9 +499,15 @@ export class TemplatesService implements OnModuleInit {
         ? item.tags
         : this.parseJson(item.tags, []),
       isFeatured: Boolean(item.isFeatured),
+      gallery: this.cleanStoredGallery(item.gallery),
       fileReady: Boolean(item.filePath || item.deliveryUrl),
       updatedAt: item.updatedAt,
     };
+  }
+
+  private cleanStoredGallery(value: unknown): string[] {
+    const items = Array.isArray(value) ? value : this.parseJson(value, []);
+    return Array.isArray(items) ? items.map(String).filter(Boolean) : [];
   }
 
   private toAdmin(item: any) {

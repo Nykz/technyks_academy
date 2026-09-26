@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { firstValueFrom } from 'rxjs';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule, NgForm } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -402,6 +403,41 @@ type EditorSection = 'product' | 'media' | 'delivery' | 'settings';
                       file.</small
                     ></label
                   >
+                </section>
+
+                <section class="editor-section">
+                  <div class="section-heading">
+                    <span class="material-symbols-outlined">collections</span>
+                    <div>
+                      <h2>Screenshots</h2>
+                      <p>
+                        Shown after the cover in the product page slideshow.
+                        Use the arrows to change the order.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    @for (src of editor.gallery || []; track src; let i = $index; let last = $last) {
+                      <figure class="overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-[#080D18]">
+                        <img [src]="src | mediaUrl" [alt]="'Screenshot ' + (i + 1)" loading="lazy" class="aspect-video w-full object-contain" />
+                        <figcaption class="flex items-center justify-between gap-1 px-2 py-1.5 text-xs">
+                          <span class="font-['JetBrains_Mono'] font-bold">{{ i + 1 }}</span>
+                          <span class="flex gap-1">
+                            <button type="button" (click)="moveScreenshot(i, -1)" [disabled]="i === 0 || savingGallery()" [attr.aria-label]="'Move screenshot ' + (i + 1) + ' earlier'" class="rounded px-1.5 py-0.5 hover:bg-slate-200 disabled:opacity-30 dark:hover:bg-white/10"><span class="material-symbols-outlined text-base" aria-hidden="true">chevron_left</span></button>
+                            <button type="button" (click)="moveScreenshot(i, 1)" [disabled]="last || savingGallery()" [attr.aria-label]="'Move screenshot ' + (i + 1) + ' later'" class="rounded px-1.5 py-0.5 hover:bg-slate-200 disabled:opacity-30 dark:hover:bg-white/10"><span class="material-symbols-outlined text-base" aria-hidden="true">chevron_right</span></button>
+                            <button type="button" (click)="removeScreenshot(i)" [disabled]="savingGallery()" [attr.aria-label]="'Remove screenshot ' + (i + 1)" class="rounded px-1.5 py-0.5 text-red-600 hover:bg-red-50 disabled:opacity-30 dark:hover:bg-red-950"><span class="material-symbols-outlined text-base" aria-hidden="true">delete</span></button>
+                          </span>
+                        </figcaption>
+                      </figure>
+                    } @empty {
+                      <p class="col-span-full text-sm text-slate-500">No screenshots yet.</p>
+                    }
+                  </div>
+                  <label class="admin-action-primary mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-semibold !text-white" [class.pointer-events-none]="savingGallery()">
+                    <span class="material-symbols-outlined text-base" aria-hidden="true">add_photo_alternate</span>
+                    {{ savingGallery() ? 'Uploading screenshots…' : 'Add screenshots' }}
+                    <input id="gallery-files" type="file" multiple accept="image/jpeg,image/png,image/webp" class="hidden" (change)="handleGalleryFiles($event)" />
+                  </label>
                 </section>
 
                 <section class="editor-section">
@@ -1135,6 +1171,69 @@ export class AdminTemplateEditorComponent implements OnInit, OnDestroy {
     } else {
       clear();
     }
+  }
+
+  readonly savingGallery = signal(false);
+
+  /** Uploads the chosen images one at a time, then saves the new order. */
+  async handleGalleryFiles(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files || []);
+    input.value = '';
+    if (!files.length) return;
+    const tooBig = files.find((file) => file.size > 10 * 1024 * 1024);
+    if (tooBig) {
+      this.showError(`${tooBig.name} is larger than 10 MB.`);
+      return;
+    }
+    this.savingGallery.set(true);
+    const added: string[] = [];
+    try {
+      for (const file of files) {
+        const { url } = await firstValueFrom(this.service.uploadMedia('image', file));
+        added.push(url);
+      }
+    } catch (error: any) {
+      this.showError(error?.error?.message || 'A screenshot could not be uploaded.');
+    }
+    this.savingGallery.set(false);
+    if (added.length) {
+      this.persistGallery([...(this.editor.gallery || []), ...added], `${added.length} screenshot${added.length === 1 ? '' : 's'} added.`);
+    }
+  }
+
+  moveScreenshot(index: number, direction: -1 | 1) {
+    const gallery = [...(this.editor.gallery || [])];
+    const target = index + direction;
+    if (target < 0 || target >= gallery.length) return;
+    [gallery[index], gallery[target]] = [gallery[target], gallery[index]];
+    this.persistGallery(gallery, 'Screenshot order saved.');
+  }
+
+  removeScreenshot(index: number) {
+    const gallery = (this.editor.gallery || []).filter((_, i) => i !== index);
+    this.persistGallery(gallery, 'Screenshot removed.');
+  }
+
+  private persistGallery(gallery: string[], message: string) {
+    this.editor = { ...this.editor, gallery };
+    const id = this.productId();
+    if (!id) {
+      this.showSuccess(`${message} Create the product to keep it.`);
+      return;
+    }
+    this.savingGallery.set(true);
+    this.service.update(id, { gallery }).subscribe({
+      next: (item) => {
+        this.savingGallery.set(false);
+        this.applyProduct(item);
+        this.showSuccess(message);
+      },
+      error: (error) => {
+        this.savingGallery.set(false);
+        this.showError(error?.error?.message || 'The screenshots could not be saved.');
+      },
+    });
   }
 
   persistMediaField(
