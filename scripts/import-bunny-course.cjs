@@ -221,13 +221,15 @@ async function apiRequest(api, token, endpoint, options = {}) {
 
 async function uploadToBunny(env, localPath, title) {
   let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  const attempts = 5;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       return await uploadToBunnyOnce(env, localPath, title);
     } catch (error) {
       lastError = error;
-      console.log(`   upload attempt ${attempt} failed: ${error.message}${attempt < 3 ? ' — retrying' : ''}`);
-      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 5000 * attempt));
+      console.log(`   upload attempt ${attempt} failed: ${error.message}${attempt < attempts ? ' — retrying' : ''}`);
+      // Wait out short internet drops: 30 s, 60 s, 90 s, 120 s.
+      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, 30000 * attempt));
     }
   }
   throw lastError;
