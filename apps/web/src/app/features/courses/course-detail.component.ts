@@ -968,6 +968,16 @@ export class CourseDetailComponent implements OnInit {
     autoplay = false,
   ): SafeResourceUrl | null {
     if (!value || this.isUploadedPromoVideo(value)) return null;
+    // Bunny intros ("bunny:<id>") play through the URL the API signed for
+    // this course; the autoplay flag is switched to match the click.
+    if (/^bunny:/i.test(value)) {
+      const signed = this.course()?.promoEmbedUrl;
+      return signed
+        ? this.sanitizer.bypassSecurityTrustResourceUrl(
+            signed.replace(/autoplay=(true|false)/, `autoplay=${autoplay}`),
+          )
+        : null;
+    }
     try {
       const url = new URL(value);
       if (url.hostname === 'youtu.be') {

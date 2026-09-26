@@ -15,6 +15,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AdminService } from './admin.service';
 import { MediaService } from './media.service';
+import { withPromoEmbed } from '../video/bunny-embed';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards';
 
 export const Roles = (...roles: string[]) => SetMetadata('roles', roles);
@@ -63,7 +64,7 @@ export class AdminController {
 
   @Get('courses/:id')
   async getCourse(@Param('id') id: string) {
-    return this.adminService.getCourseById(id);
+    return withPromoEmbed(await this.adminService.getCourseById(id));
   }
 
   @Get('courses/:id/students')
@@ -112,7 +113,7 @@ export class AdminController {
 
   @Post('courses')
   async createCourse(@Body() dto: any) {
-    return this.adminService.createCourse(dto);
+    return withPromoEmbed(await this.adminService.createCourse(dto));
   }
 
   @Post('courses/import-javascript')
@@ -122,7 +123,7 @@ export class AdminController {
 
   @Patch('courses/:id')
   async updateCourse(@Param('id') id: string, @Body() dto: any) {
-    return this.adminService.updateCourse(id, dto);
+    return withPromoEmbed(await this.adminService.updateCourse(id, dto));
   }
 
   @Delete('courses/:id')

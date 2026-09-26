@@ -5,14 +5,12 @@
     <title>Technyks Academy - Master Software Architecture</title>
     <base href="/">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#040810">
+    <meta name="theme-color" content="#ffffff">
     <script>
       (function () {
         try {
-          var savedTheme = localStorage.getItem('technyks-theme');
-          var isDark = savedTheme
-            ? savedTheme === 'dark'
-            : window.matchMedia('(prefers-color-scheme: dark)').matches;
+          // Light mode for everyone unless they chose dark with the toggle.
+          var isDark = localStorage.getItem('technyks-theme') === 'dark';
           document.documentElement.classList.add(
             isDark ? 'dark' : 'light-theme',
           );
@@ -20,15 +18,8 @@
             isDark ? 'dark-theme' : 'theme-pending',
           );
         } catch (_) {
-          var systemDark =
-            window.matchMedia &&
-            window.matchMedia('(prefers-color-scheme: dark)').matches;
-          document.documentElement.classList.add(
-            systemDark ? 'dark' : 'light-theme',
-          );
-          document.documentElement.classList.add(
-            systemDark ? 'dark-theme' : 'theme-pending',
-          );
+          document.documentElement.classList.add('light-theme');
+          document.documentElement.classList.add('theme-pending');
         }
       })();
     </script>
@@ -111,5 +102,5 @@
       </div>
     </div>
     <app-root></app-root>
-  <link rel="modulepreload" href="chunk-GJZGYW7H.js"><link rel="modulepreload" href="chunk-IMOQXP3Q.js"><link rel="modulepreload" href="chunk-RQJPWFQL.js"><link rel="modulepreload" href="chunk-E5YOMPOP.js"><link rel="modulepreload" href="chunk-FRCFQHUQ.js"><script src="main-GDNHBKG4.js" type="module"></script></body>
+  <link rel="modulepreload" href="chunk-GJZGYW7H.js"><link rel="modulepreload" href="chunk-IMOQXP3Q.js"><link rel="modulepreload" href="chunk-RQJPWFQL.js"><link rel="modulepreload" href="chunk-E5YOMPOP.js"><link rel="modulepreload" href="chunk-FRCFQHUQ.js"><script src="main-6XQRZAIN.js" type="module"></script></body>
 </html>

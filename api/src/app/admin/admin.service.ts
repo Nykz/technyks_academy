@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { parseBunnyVideoRef } from '../video/bunny-embed';
 import { JAVASCRIPT_COURSE } from '../courses/javascript-course.data';
 
 const COURSE_INCLUDE = {
@@ -1244,6 +1245,10 @@ export class AdminService {
   private cleanPromoVideoUrl(value: unknown): string | null {
     const url = String(value || '').trim();
     if (!url) return null;
+    // A Bunny Stream link or video ID is stored as "bunny:<id>"; the course
+    // endpoints turn it into a freshly signed player URL.
+    const bunnyId = parseBunnyVideoRef(url);
+    if (bunnyId) return `bunny:${bunnyId}`;
     if (url.length > 12_000_000) {
       throw new BadRequestException(
         'Promotional video files must be 8 MB or smaller.',
@@ -1263,7 +1268,7 @@ export class AdminService {
       return parsed.toString();
     } catch {
       throw new BadRequestException(
-        'Promotional video must be a valid YouTube, Vimeo, or video URL.',
+        'Promotional video must be a Bunny Stream link or video ID, or a valid YouTube, Vimeo, or video URL.',
       );
     }
   }

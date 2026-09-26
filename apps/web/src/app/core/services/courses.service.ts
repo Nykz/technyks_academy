@@ -50,6 +50,8 @@ export interface Course {
   description: string;
   thumbnail?: string | null;
   promoVideoUrl?: string | null;
+  /** Signed Bunny player URL when promoVideoUrl is "bunny:<id>". */
+  promoEmbedUrl?: string | null;
   price: number;
   isFree: boolean;
   currency: string;

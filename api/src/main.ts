@@ -91,6 +91,10 @@ async function bootstrap() {
       // player iframe, so Bunny's "Allowed domains" check rejects every
       // embed. Send only the origin (https://technyks.com) to other sites.
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      // Google Sign-In opens a popup that reports back to this page;
+      // helmet's default "same-origin" blocks that, so the Google button
+      // could never complete a login. This is Google's recommended value.
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
     }),
   );
 

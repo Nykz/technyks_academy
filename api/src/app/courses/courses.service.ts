@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { withPromoEmbed } from '../video/bunny-embed';
 import { JAVASCRIPT_COURSE } from './javascript-course.data';
 import { TYPESCRIPT_COURSE } from './typescript-course.data';
 
@@ -444,6 +445,7 @@ export class CoursesService implements OnModuleInit {
       description: course.description,
       thumbnail: course.thumbnail,
       promoVideoUrl: course.promoVideoUrl ?? null,
+      promoEmbedUrl: withPromoEmbed({ promoVideoUrl: course.promoVideoUrl }).promoEmbedUrl,
       price: course.price,
       isFree: Boolean(course.isFree ?? Number(course.price || 0) === 0),
       currency: course.currency,

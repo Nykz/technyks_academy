@@ -403,8 +403,8 @@ import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
                     @if (isUploadingVideo()) {<div class="absolute inset-0 bg-[#040810]/90 backdrop-blur-sm grid place-items-center"><div class="text-center"><span class="material-symbols-outlined text-3xl text-[#3B82F6] animate-spin">progress_activity</span><p class="font-['JetBrains_Mono'] text-[11px] text-white mt-2">Uploading video…</p></div></div>}
                   </div>
                   <div class="rounded-xl border border-[#1E293B] bg-[#040810]/45 p-5 flex flex-col gap-4">
-                    <p class="font-['Inter'] text-xs text-[#d9c3af] leading-relaxed">Upload an MP4, WebM, OGG, or MOV intro up to 250 MB, or paste a YouTube/Vimeo URL.</p>
-                    <input type="url" [ngModel]="course()?.promoVideoUrl" (ngModelChange)="updateCourseField('promoVideoUrl', $event)" placeholder="https://youtube.com/watch?v=…" class="w-full bg-[#040810] border border-[#1E293B] focus:border-[#3B82F6] outline-none rounded-lg px-3 py-2.5 text-xs text-white" />
+                    <p class="font-['Inter'] text-xs text-[#d9c3af] leading-relaxed">Paste a Bunny Stream link or video ID (recommended), a YouTube/Vimeo URL, or upload an MP4, WebM, OGG, or MOV up to 250 MB. A Bunny intro previews here after you save.</p>
+                    <input type="text" [ngModel]="course()?.promoVideoUrl" (ngModelChange)="updateCourseField('promoVideoUrl', $event)" placeholder="Bunny link or video ID, or https://youtube.com/watch?v=…" class="w-full bg-[#040810] border border-[#1E293B] focus:border-[#3B82F6] outline-none rounded-lg px-3 py-2.5 text-xs text-white" />
                     <div class="grid grid-cols-2 gap-2"><label [class.pointer-events-none]="isUploadingVideo()" class="text-center font-['JetBrains_Mono'] text-[11px] font-bold text-[#040810] bg-[#3B82F6] px-3 py-3 cursor-pointer">Upload video<input type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime" class="hidden" (change)="handlePromoVideoFile($event)" /></label><button type="button" (click)="saveAllChanges()" [disabled]="isSaving()" class="admin-action-primary font-['JetBrains_Mono'] text-[11px] font-bold !text-white bg-[#2563EB] disabled:opacity-50">Save URL</button></div>
                   </div>
                 </div>
@@ -681,8 +681,8 @@ export class CourseEditorComponent implements OnInit {
           this.course.set(c);
           this.modules.set(c.modules || []);
           this.loadCourseCoupon();
-          this.promoEmbedUrl.set(this.toPromoEmbedUrl(c.promoVideoUrl));
-          this.referralUrl = `https://courses.codingtechnyks.com/courses/${c.slug}?referralCode=3BDC`;
+          this.promoEmbedUrl.set(this.toPromoEmbedUrl(c.promoVideoUrl, c.promoEmbedUrl));
+          this.referralUrl = `https://technyks.com/courses/${c.slug}?referralCode=3BDC`;
           this.isLoading.set(false);
         },
         error: () => this.isLoading.set(false),
@@ -816,7 +816,7 @@ export class CourseEditorComponent implements OnInit {
         this.course.set(saved);
         this.modules.set(saved.modules || this.modules());
         if (field === 'promoVideoUrl') {
-          this.promoEmbedUrl.set(this.toPromoEmbedUrl(saved.promoVideoUrl));
+          this.promoEmbedUrl.set(this.toPromoEmbedUrl(saved.promoVideoUrl, saved.promoEmbedUrl));
           this.isUploadingVideo.set(false);
         } else this.isUploadingImage.set(false);
         if (
@@ -847,8 +847,17 @@ export class CourseEditorComponent implements OnInit {
     return url.includes('/uploads/course-media/');
   }
 
-  private toPromoEmbedUrl(value?: string | null): SafeResourceUrl | null {
+  private toPromoEmbedUrl(
+    value?: string | null,
+    signedBunnyUrl?: string | null,
+  ): SafeResourceUrl | null {
     if (!value || this.isDirectPromoVideo(value)) return null;
+    // Saved Bunny intros ("bunny:<id>") play through a URL the API signs.
+    if (/^bunny:/i.test(value)) {
+      return signedBunnyUrl
+        ? this.sanitizer.bypassSecurityTrustResourceUrl(signedBunnyUrl)
+        : null;
+    }
     try {
       const url = new URL(value);
       if (url.hostname === 'youtu.be') {
@@ -1054,7 +1063,7 @@ export class CourseEditorComponent implements OnInit {
       next: (saved) => {
         this.course.set(saved);
         this.modules.set(saved.modules || []);
-        this.promoEmbedUrl.set(this.toPromoEmbedUrl(saved.promoVideoUrl));
+        this.promoEmbedUrl.set(this.toPromoEmbedUrl(saved.promoVideoUrl, saved.promoEmbedUrl));
         this.isSaving.set(false);
         const timeStr = new Date().toLocaleTimeString([], {
           hour: '2-digit',
