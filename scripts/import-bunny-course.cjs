@@ -48,6 +48,7 @@ function parseArgs(argv) {
     if (value === '--apply') result.apply = true;
     else if (value === '--replace-curriculum') result.replace = true;
     else if (value === '--create') result.create = true;
+    else if (value === '--upload-only') result.uploadOnly = true;
     else if (value === '--source') result.source = argv[++index];
     else if (value === '--course') result.course = argv[++index];
     else if (value === '--api') result.api = argv[++index];
@@ -110,22 +111,54 @@ function naturalSort(items) {
   return items.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
+// Folders that hold slides, thumbnails or promo clips rather than lessons,
+// e.g. "Resources", "6.Attached Resources", "thumbnails", "extras".
+const NON_LESSON_FOLDER = /^(?:\d+[._ -]*)*(?:attached\s+)?(?:resources?|thumbnails?|extras?|pdfs?)$/i;
+
+function isLessonFolder(entry) {
+  return entry.isDirectory() && !entry.name.startsWith('.') && !NON_LESSON_FOLDER.test(entry.name.trim());
+}
+
+function isVideoFile(entry) {
+  // "._name.mp4" files are macOS metadata, not videos.
+  return entry.isFile() && !entry.name.startsWith('.') &&
+    VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase());
+}
+
 function readVideoFiles(directory) {
   return naturalSort(
-    fs.readdirSync(directory, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
-      .map((entry) => entry.name),
+    fs.readdirSync(directory, { withFileTypes: true }).filter(isVideoFile).map((entry) => entry.name),
   );
+}
+
+/**
+ * Videos of one module, in order. A lesson may sit in its own numbered
+ * sub-folder ("11.Tool Calling/Tool Calling.mp4"); it takes that folder's
+ * place in the order, and a sub-folder holding several videos contributes
+ * them all at that position. Paths are relative to the module folder.
+ */
+function readModuleVideos(directory, prefix = '') {
+  const entries = fs.readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => isLessonFolder(entry) || isVideoFile(entry));
+  const byName = new Map(entries.map((entry) => [entry.name, entry]));
+  const result = [];
+  for (const name of naturalSort([...byName.keys()])) {
+    const entry = byName.get(name);
+    const relative = prefix ? path.join(prefix, name) : name;
+    if (entry.isDirectory()) result.push(...readModuleVideos(path.join(directory, name), relative));
+    else result.push(relative);
+  }
+  return result;
 }
 
 function coursePlan(source) {
   const entries = fs.readdirSync(source, { withFileTypes: true });
-  const folders = naturalSort(entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name));
+  const folders = naturalSort(entries.filter(isLessonFolder).map((entry) => entry.name));
   const modules = folders
     .map((folder) => ({
       title: stripOrderingPrefix(folder) || folder,
       folder,
-      videos: readVideoFiles(path.join(source, folder)),
+      videos: readModuleVideos(path.join(source, folder)),
     }))
     .filter((module) => module.videos.length > 0);
 
@@ -187,6 +220,20 @@ async function apiRequest(api, token, endpoint, options = {}) {
 }
 
 async function uploadToBunny(env, localPath, title) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await uploadToBunnyOnce(env, localPath, title);
+    } catch (error) {
+      lastError = error;
+      console.log(`   upload attempt ${attempt} failed: ${error.message}${attempt < 3 ? ' — retrying' : ''}`);
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 5000 * attempt));
+    }
+  }
+  throw lastError;
+}
+
+async function uploadToBunnyOnce(env, localPath, title) {
   const library = env.BUNNY_STREAM_LIBRARY_ID;
   const accessKey = env.BUNNY_STREAM_API_KEY;
   const base = `https://video.bunnycdn.com/library/${encodeURIComponent(library)}/videos`;
@@ -200,16 +247,24 @@ async function uploadToBunny(env, localPath, title) {
 
   const size = fs.statSync(localPath).size;
   const stream = Readable.toWeb(fs.createReadStream(localPath));
-  await request(`${base}/${encodeURIComponent(videoId)}`, {
-    method: 'PUT',
-    headers: {
-      AccessKey: accessKey,
-      'content-type': 'application/octet-stream',
-      'content-length': String(size),
-    },
-    body: stream,
-    duplex: 'half',
-  });
+  try {
+    await request(`${base}/${encodeURIComponent(videoId)}`, {
+      method: 'PUT',
+      headers: {
+        AccessKey: accessKey,
+        'content-type': 'application/octet-stream',
+        'content-length': String(size),
+      },
+      body: stream,
+      duplex: 'half',
+    });
+  } catch (error) {
+    // Don't leave an empty video behind in the Bunny library.
+    await request(`${base}/${encodeURIComponent(videoId)}`, {
+      method: 'DELETE', headers: { AccessKey: accessKey },
+    }).catch(() => undefined);
+    throw error;
+  }
   return videoId;
 }
 
@@ -245,6 +300,37 @@ function basicCoursePayload(title, modules, price) {
   };
 }
 
+/**
+ * Uploads every video to Bunny and records it in the resume manifest,
+ * without touching the website. A later --create run reuses the uploads.
+ */
+async function uploadOnly(source, env, modules, lectureCount) {
+  const manifest = loadManifest(source);
+  if (manifest.libraryId && String(manifest.libraryId) !== String(env.BUNNY_STREAM_LIBRARY_ID)) {
+    die(`${MANIFEST_FILE} records uploads to Bunny library ${manifest.libraryId}, but .env points at ${env.BUNNY_STREAM_LIBRARY_ID}.`);
+  }
+  manifest.libraryId = env.BUNNY_STREAM_LIBRARY_ID;
+  let done = 0;
+  let uploaded = 0;
+  for (const module of modules) {
+    for (const filename of module.videos) {
+      done += 1;
+      const relative = path.join(module.folder, filename).replace(/\\/g, '/');
+      if (manifest.videos[relative]?.videoId) continue;
+      const localPath = path.join(source, module.folder, filename);
+      const mb = (fs.statSync(localPath).size / 1e6).toFixed(0);
+      console.log(`[${new Date().toLocaleTimeString()}] Uploading ${done}/${lectureCount} (${mb} MB): ${relative}`);
+      const title = titleFromFilename(filename, module.title);
+      const videoId = await uploadToBunny(env, localPath, title);
+      manifest.videos[relative] = { videoId, title, uploadedAt: new Date().toISOString() };
+      saveManifest(source, manifest);
+      uploaded += 1;
+    }
+  }
+  console.log(`
+✓ ${lectureCount} videos are in Bunny (${uploaded} uploaded now, ${lectureCount - uploaded} already there). The website was not changed.`);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) return printHelp();
@@ -271,6 +357,7 @@ async function main() {
     return;
   }
 
+  if (args.uploadOnly) return uploadOnly(source, env, modules, lectureCount);
   if (!args.create && !args.course) die('Choose --create for a new draft course or pass --course for an existing course.');
   const api = (args.api || env.APP_API_URL || 'http://127.0.0.1:4310/api').replace(/\/$/, '');
   const token = await login(api, env);
