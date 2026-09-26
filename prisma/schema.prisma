@@ -354,3 +354,24 @@ model CourseAnnouncement {
 
   @@index([createdAt])
 }
+
+// Images uploaded in Admin (thumbnails, template images). Kept in the
+// database so they survive redeploys; each file is split into small
+// chunks (256 KB each) so no single write exceeds the MySQL server's packet limit.
+model MediaAsset {
+  id        String       @id @default(uuid())
+  filename  String       @unique
+  mimeType  String
+  size      Int
+  createdAt DateTime     @default(now())
+  chunks    MediaChunk[]
+}
+
+model MediaChunk {
+  assetId String
+  asset   MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  index   Int
+  data    Bytes      @db.MediumBlob
+
+  @@id([assetId, index])
+}

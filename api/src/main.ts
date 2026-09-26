@@ -13,7 +13,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { AppModule } from './app/app.module';
-import { getUploadsDirectory } from './app/admin/media.service';
+import { MediaService, getUploadsDirectory } from './app/admin/media.service';
 
 function getWebDirectory() {
   const configuredDirectory = String(process.env.WEB_DIST_DIR || '').trim();
@@ -107,9 +107,37 @@ async function bootstrap() {
     app.getHttpAdapter().getInstance().set('trust proxy', 1);
   }
 
+  // Uploaded images are kept in the database; serve them first and fall
+  // back to files on disk (uploaded videos, or local development).
+  const mediaService = app.get(MediaService, { strict: false });
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .get(
+      '/uploads/course-media/:filename',
+      async (request: Request, response: Response, next: NextFunction) => {
+        try {
+          const media = await mediaService.read(String(request.params.filename));
+          if (!media) {
+            next();
+            return;
+          }
+          // Filenames are unique per upload, so the file never changes.
+          response.set({
+            'Content-Type': media.mimeType,
+            'Content-Length': String(media.data.length),
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          });
+          response.end(media.data);
+        } catch (error) {
+          next(error);
+        }
+      },
+    );
+
   const uploadsDirectory = getUploadsDirectory();
   mkdirSync(uploadsDirectory, { recursive: true });
-  Logger.log(`[Startup] Uploaded media is stored in ${uploadsDirectory}`, 'Bootstrap');
+  Logger.log(`[Startup] Uploaded images are stored in the database; uploaded videos in ${uploadsDirectory}`, 'Bootstrap');
   app.useStaticAssets(uploadsDirectory, {
     prefix: '/uploads/',
     index: false,

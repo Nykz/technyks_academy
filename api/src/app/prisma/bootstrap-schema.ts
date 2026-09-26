@@ -77,6 +77,14 @@ export const BOOTSTRAP_TABLES: { name: string; sql: string }[] = [
   {
     "name": "CourseAnnouncement",
     "sql": "CREATE TABLE `CourseAnnouncement` (\n    `id` VARCHAR(191) NOT NULL,\n    `createdById` VARCHAR(191) NOT NULL,\n    `title` VARCHAR(191) NOT NULL,\n    `body` TEXT NOT NULL,\n    `targetCourseIds` JSON NOT NULL,\n    `sendEmail` BOOLEAN NOT NULL DEFAULT false,\n    `emailStatus` VARCHAR(191) NOT NULL DEFAULT 'NOT_REQUESTED',\n    `recipientCount` INTEGER NOT NULL DEFAULT 0,\n    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n    `updatedAt` DATETIME(3) NOT NULL,\n\n    INDEX `CourseAnnouncement_createdAt_idx`(`createdAt`),\n    PRIMARY KEY (`id`)\n) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+  },
+  {
+    "name": "MediaAsset",
+    "sql": "CREATE TABLE `MediaAsset` (\n    `id` VARCHAR(191) NOT NULL,\n    `filename` VARCHAR(191) NOT NULL,\n    `mimeType` VARCHAR(191) NOT NULL,\n    `size` INTEGER NOT NULL,\n    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),\n\n    UNIQUE INDEX `MediaAsset_filename_key`(`filename`),\n    PRIMARY KEY (`id`)\n) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+  },
+  {
+    "name": "MediaChunk",
+    "sql": "CREATE TABLE `MediaChunk` (\n    `assetId` VARCHAR(191) NOT NULL,\n    `index` INTEGER NOT NULL,\n    `data` MEDIUMBLOB NOT NULL,\n\n    PRIMARY KEY (`assetId`, `index`)\n) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
   }
 ];
 
@@ -172,5 +180,9 @@ export const BOOTSTRAP_FOREIGN_KEYS: { table: string; sql: string }[] = [
   {
     "table": "CourseAnnouncement",
     "sql": "ALTER TABLE `CourseAnnouncement` ADD CONSTRAINT `CourseAnnouncement_createdById_fkey` FOREIGN KEY (`createdById`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE"
+  },
+  {
+    "table": "MediaChunk",
+    "sql": "ALTER TABLE `MediaChunk` ADD CONSTRAINT `MediaChunk_assetId_fkey` FOREIGN KEY (`assetId`) REFERENCES `MediaAsset`(`id`) ON DELETE CASCADE ON UPDATE CASCADE"
   }
 ];

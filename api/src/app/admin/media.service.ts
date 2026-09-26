@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { persistentDirectory } from '../storage-paths';
+import { PrismaService } from '../prisma/prisma.service';
 
 const IMAGE_TYPES: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -22,12 +23,18 @@ const VIDEO_TYPES: Record<string, string> = {
   'video/quicktime': '.mov',
 };
 
+/** Images are stored in the database in chunks of this size. */
+const CHUNK_BYTES = 256 * 1024;
+const MEDIA_FILENAME = /^(?:image|video)-[A-Za-z0-9-]+\.[A-Za-z0-9]+$/;
+
 export function getUploadsDirectory() {
   return persistentDirectory(process.env.UPLOADS_DIR, 'uploads');
 }
 
 @Injectable()
 export class MediaService {
+  constructor(private readonly prisma: PrismaService) {}
+
   async store(kind: 'image' | 'video', file?: any) {
     if (kind !== 'image' && kind !== 'video') {
       throw new BadRequestException('Media type must be image or video.');
@@ -55,10 +62,40 @@ export class MediaService {
       );
     }
 
-    const directory = join(getUploadsDirectory(), 'course-media');
-    await mkdir(directory, { recursive: true });
     const filename = `${kind}-${Date.now()}-${randomUUID()}${extension}`;
-    await writeFile(join(directory, filename), file.buffer, { mode: 0o644 });
+    const buffer: Buffer = file.buffer;
+    if (kind === 'image' && this.prisma.isDbConnected) {
+      // Images live in the database, so redeploys can never remove them.
+      // Each chunk is its own INSERT: a nested create would send every chunk
+      // in one statement and exceed the server's max_allowed_packet.
+      await this.prisma.$transaction(
+        async (db) => {
+          const asset = await db.mediaAsset.create({
+            data: {
+              filename,
+              mimeType: String(file.mimetype).toLowerCase(),
+              size: buffer.length,
+            },
+          });
+          for (let index = 0; index * CHUNK_BYTES < buffer.length; index += 1) {
+            await db.mediaChunk.create({
+              data: {
+                assetId: asset.id,
+                index,
+                data: buffer.subarray(index * CHUNK_BYTES, (index + 1) * CHUNK_BYTES),
+              },
+            });
+          }
+        },
+        { timeout: 60_000, maxWait: 10_000 },
+      );
+    } else {
+      // Videos (too large for the database) go to the persistent folder
+      // outside the build; Bunny links are the recommended way to add intros.
+      const directory = join(getUploadsDirectory(), 'course-media');
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(directory, filename), buffer, { mode: 0o644 });
+    }
 
     const publicBase = String(
       process.env.UPLOADS_PUBLIC_URL || '/uploads',
@@ -67,7 +104,7 @@ export class MediaService {
       url: `${publicBase}/course-media/${filename}`,
       filename,
       mimeType: file.mimetype,
-      size: Number(file.size || file.buffer.length),
+      size: buffer.length,
     };
   }
 
@@ -87,15 +124,36 @@ export class MediaService {
     }
 
     const filename = basename(pathname);
-    if (!/^(?:image|video)-[A-Za-z0-9-]+\.[A-Za-z0-9]+$/.test(filename)) {
+    if (!MEDIA_FILENAME.test(filename)) {
       throw new BadRequestException('Invalid uploaded media path.');
     }
 
+    if (this.prisma.isDbConnected) {
+      await this.prisma.mediaAsset.deleteMany({ where: { filename } });
+    }
     try {
       await unlink(join(getUploadsDirectory(), 'course-media', filename));
     } catch (error: any) {
       if (error?.code !== 'ENOENT') throw error;
     }
     return { success: true };
+  }
+
+  /** An uploaded image stored in the database, or null if it isn't there. */
+  async read(
+    filename: string,
+  ): Promise<{ mimeType: string; data: Buffer } | null> {
+    if (!MEDIA_FILENAME.test(filename) || !this.prisma.isDbConnected) {
+      return null;
+    }
+    const asset = await this.prisma.mediaAsset.findUnique({
+      where: { filename },
+      include: { chunks: { orderBy: { index: 'asc' } } },
+    });
+    if (!asset) return null;
+    return {
+      mimeType: asset.mimeType,
+      data: Buffer.concat(asset.chunks.map((chunk) => Buffer.from(chunk.data))),
+    };
   }
 }
