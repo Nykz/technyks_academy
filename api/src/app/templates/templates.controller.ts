@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import {
   Body,
   Controller,
@@ -37,6 +38,7 @@ export class TemplatesController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Get(':id/download')
   @Header('Cache-Control', 'private, no-store')
   async download(@Request() request: any, @Param('id') id: string) {

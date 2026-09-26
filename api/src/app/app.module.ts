@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AccountAwareThrottlerGuard } from './throttle';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -25,7 +26,8 @@ import { MailModule } from './mail/mail.service';
     ThrottlerModule.forRoot([
       {
         ttl: 60_000,
-        limit: 120,
+        // Per signed-in account, or per address for visitors (see throttle.ts).
+        limit: 300,
       },
     ]),
     PrismaModule,
@@ -42,6 +44,6 @@ import { MailModule } from './mail/mail.service';
     TemplatesModule,
   ],
   controllers: [AppController],
-  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [AppService, { provide: APP_GUARD, useClass: AccountAwareThrottlerGuard }],
 })
 export class AppModule {}

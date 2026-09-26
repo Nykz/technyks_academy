@@ -1,3 +1,4 @@
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { Controller, Post, Body, Get, Headers, UseGuards, Request } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { CouponsService } from '../coupons/coupons.service';
@@ -18,6 +19,7 @@ export class PaymentsController {
   @Get('availability')
   getAvailability() { return this.paymentsService.getCheckoutAvailability(); }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('coupon/validate')
   async validateCoupon(@Body() dto: {
     code: string;
@@ -38,6 +40,7 @@ export class PaymentsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('create-order')
   async createOrder(
     @Request() req: any,
@@ -50,6 +53,7 @@ export class PaymentsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('verify-razorpay')
   async verifyRazorpay(
     @Request() req: any,
@@ -58,6 +62,7 @@ export class PaymentsController {
     return this.paymentsService.verifyPayment(req.user.id, dto);
   }
 
+  @SkipThrottle()
   @Post('webhook')
   async handleWebhook(
     @Request() req: any,

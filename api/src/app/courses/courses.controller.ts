@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { ReviewsService } from './reviews.service';
@@ -34,6 +35,7 @@ export class CoursesController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post(':courseId/reviews')
   async saveCourseReview(
     @Request() req: any,

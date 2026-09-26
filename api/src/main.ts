@@ -107,7 +107,8 @@ async function bootstrap() {
     // Hostinger's CDN (and possibly another proxy) sits in front of Node.
     // TRUST_PROXY_HOPS is how many proxies to trust from the right of
     // X-Forwarded-For; the wrong value makes every visitor share one rate
-    // limit. Check GET /health/client to pick it.
+    // limit. 1 is correct for Hostinger (verified: req.ip is the visitor's
+    // address and a forged X-Forwarded-For is ignored).
     const hops = Math.max(0, Math.floor(Number(process.env.TRUST_PROXY_HOPS ?? 1)));
     app.getHttpAdapter().getInstance().set('trust proxy', hops);
   }

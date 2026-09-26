@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -31,6 +32,7 @@ export class EnrollmentsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('free')
   async enrollInFreeCourse(
     @Request() req: any,
@@ -43,6 +45,7 @@ export class EnrollmentsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('progress')
   async updateProgress(
     @Request() req: any,

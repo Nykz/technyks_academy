@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import {
   Body,
   Controller,
@@ -33,6 +34,7 @@ export class CommunicationController {
     );
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('courses/:courseId/questions')
   createQuestion(
     @Request() req: any,
@@ -42,6 +44,7 @@ export class CommunicationController {
     return this.communicationService.createQuestion(req.user, courseId, dto);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('questions/:questionId/replies')
   createReply(
     @Request() req: any,
@@ -110,6 +113,7 @@ export class AdminCommunicationController {
     return this.communicationService.getEmailConfiguration();
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('email-test')
   sendTestEmail(@Request() req: any) {
     return this.communicationService.sendTestEmail(req.user);
