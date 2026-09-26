@@ -50,3 +50,45 @@ describe('ReviewsService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
+
+describe('ReviewsService - admin moderation', () => {
+  const makeService = () => {
+    const prisma: any = {
+      isDbConnected: false,
+      inMemoryUsers: [
+        { id: 'u1', name: 'Asha', email: 'asha@example.com' },
+        { id: 'u2', name: 'Ravi', email: 'ravi@example.com' },
+      ],
+      inMemoryCourses: [{ id: 'c1', title: 'Vibe Coding', slug: 'vibe-coding' }],
+      inMemoryReviews: [
+        { id: 'r1', userId: 'u1', courseId: 'c1', rating: 5, comment: 'Excellent course, very clear.', createdAt: new Date('2026-09-01') },
+        { id: 'r2', userId: 'u2', courseId: 'c1', rating: 1, comment: 'Spam spam buy followers now', createdAt: new Date('2026-09-02') },
+      ],
+    };
+    return { service: new ReviewsService(prisma), prisma };
+  };
+
+  it('lists reviews newest first with student and course details', async () => {
+    const { service } = makeService();
+    const reviews = await service.listForAdmin();
+    expect(reviews.map((review) => review.id)).toEqual(['r2', 'r1']);
+    expect(reviews[0]).toMatchObject({
+      user: { name: 'Ravi', email: 'ravi@example.com' },
+      course: { id: 'c1', title: 'Vibe Coding' },
+    });
+  });
+
+  it('filters by words, student email and star rating', async () => {
+    const { service } = makeService();
+    expect((await service.listForAdmin({ search: 'spam' })).map((r) => r.id)).toEqual(['r2']);
+    expect((await service.listForAdmin({ search: 'asha@example' })).map((r) => r.id)).toEqual(['r1']);
+    expect((await service.listForAdmin({ rating: 1 })).map((r) => r.id)).toEqual(['r2']);
+  });
+
+  it('deletes a review and reports a missing one', async () => {
+    const { service, prisma } = makeService();
+    await service.deleteReview('r2');
+    expect(prisma.inMemoryReviews.map((r: any) => r.id)).toEqual(['r1']);
+    await expect(service.deleteReview('r2')).rejects.toThrow('Review not found.');
+  });
+});

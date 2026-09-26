@@ -26,6 +26,7 @@ import {
 import { AdminCommunicationComponent } from './admin-communication.component';
 import { AdminTemplatesComponent } from './admin-templates.component';
 import { AdminTemplateOrdersComponent } from './admin-template-orders.component';
+import { AdminReviewsComponent } from './admin-reviews.component';
 import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 
 type AdminTab =
@@ -37,6 +38,7 @@ type AdminTab =
   | 'coupons'
   | 'membership'
   | 'communication'
+  | 'reviews'
   | 'support'
   | 'settings';
 
@@ -50,6 +52,7 @@ type AdminTab =
     AdminCommunicationComponent,
     AdminTemplatesComponent,
     AdminTemplateOrdersComponent,
+    AdminReviewsComponent,
     MediaUrlPipe,
   ],
   template: `
@@ -97,6 +100,10 @@ type AdminTab =
 
       @if (activeTab() === 'communication') {
         <app-admin-communication [courses]="publishedCourses()" />
+      }
+
+      @if (activeTab() === 'reviews') {
+        <app-admin-reviews [courses]="publishedCourses()" />
       }
 
       @if (activeTab() === 'templates') {
@@ -914,6 +921,7 @@ export class AdminDashboardComponent implements OnInit {
       label: 'Engagement',
       items: [
         { id: 'communication', label: 'Communication', icon: 'campaign' },
+        { id: 'reviews', label: 'Reviews', icon: 'reviews' },
         { id: 'coupons', label: 'Coupons', icon: 'sell' },
         { id: 'support', label: 'Support', icon: 'support_agent' },
       ],
@@ -934,6 +942,7 @@ export class AdminDashboardComponent implements OnInit {
       coupons: 'Coupon Management',
       membership: 'Membership Program',
       communication: 'Communication Center',
+      reviews: 'Course Reviews',
       support: 'Customer Support',
       settings: 'Site Settings & Banner',
     };

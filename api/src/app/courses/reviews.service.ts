@@ -108,6 +108,72 @@ export class ReviewsService {
     return this.toPublicReview(review);
   }
 
+  /** Every review with its student and course, newest first (admin only). */
+  async listForAdmin(filters: { search?: string; courseId?: string; rating?: number } = {}) {
+    const search = String(filters.search || '').trim().toLowerCase();
+    const rating = Number(filters.rating) || 0;
+    let rows: any[];
+    if (this.prisma.isDbConnected) {
+      rows = await this.prisma.review.findMany({
+        where: {
+          ...(filters.courseId ? { courseId: filters.courseId } : {}),
+          ...(rating ? { rating } : {}),
+        },
+        include: {
+          user: { select: { name: true, email: true, avatarUrl: true } },
+          course: { select: { id: true, title: true, slug: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    } else {
+      rows = this.prisma.inMemoryReviews
+        .filter((review) => !filters.courseId || review.courseId === filters.courseId)
+        .filter((review) => !rating || Number(review.rating) === rating)
+        .map((review) => {
+          const user = this.prisma.inMemoryUsers.find((candidate) => candidate.id === review.userId);
+          const course = this.prisma.inMemoryCourses.find((candidate) => candidate.id === review.courseId);
+          return {
+            ...review,
+            user: { name: user?.name || review.user?.name || 'Student', email: user?.email || '', avatarUrl: user?.avatarUrl || null },
+            course: course ? { id: course.id, title: course.title, slug: course.slug } : null,
+          };
+        })
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    }
+    return rows
+      .map((review) => ({
+        id: review.id,
+        rating: Number(review.rating || 0),
+        comment: review.comment || '',
+        createdAt: review.createdAt,
+        updatedAt: review.updatedAt,
+        user: { name: review.user?.name || 'Student', email: review.user?.email || '' },
+        course: review.course
+          ? { id: review.course.id, title: review.course.title, slug: review.course.slug }
+          : null,
+      }))
+      .filter(
+        (review) =>
+          !search ||
+          `${review.comment} ${review.user.name} ${review.user.email} ${review.course?.title || ''}`
+            .toLowerCase()
+            .includes(search),
+      );
+  }
+
+  /** Removes a review, e.g. abusive or spam content (admin only). */
+  async deleteReview(id: string) {
+    if (this.prisma.isDbConnected) {
+      const deleted = await this.prisma.review.deleteMany({ where: { id } });
+      if (!deleted.count) throw new NotFoundException('Review not found.');
+      return { success: true };
+    }
+    const before = this.prisma.inMemoryReviews.length;
+    this.prisma.inMemoryReviews = this.prisma.inMemoryReviews.filter((review) => review.id !== id);
+    if (this.prisma.inMemoryReviews.length === before) throw new NotFoundException('Review not found.');
+    return { success: true };
+  }
+
   private async findCourse(id: string) {
     if (this.prisma.isDbConnected) {
       try {
