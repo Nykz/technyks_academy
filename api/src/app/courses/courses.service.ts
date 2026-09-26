@@ -401,6 +401,9 @@ export class CoursesService implements OnModuleInit {
 
     return {
       ...course,
+      // Signed Bunny player URL for a "bunny:<id>" intro (null otherwise).
+      promoEmbedUrl: withPromoEmbed({ promoVideoUrl: course.promoVideoUrl })
+        .promoEmbedUrl,
       isFree: Boolean(course.isFree ?? Number(course.price || 0) === 0),
       rating,
       reviewCount: reviews.length,
@@ -445,7 +448,6 @@ export class CoursesService implements OnModuleInit {
       description: course.description,
       thumbnail: course.thumbnail,
       promoVideoUrl: course.promoVideoUrl ?? null,
-      promoEmbedUrl: withPromoEmbed({ promoVideoUrl: course.promoVideoUrl }).promoEmbedUrl,
       price: course.price,
       isFree: Boolean(course.isFree ?? Number(course.price || 0) === 0),
       currency: course.currency,

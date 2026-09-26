@@ -54,3 +54,35 @@ describe('CoursesService - public course safety', () => {
     expect(result.modules[0].lessons[0].title).toBe('Introduction');
   });
 });
+
+describe('CoursesService - Bunny intro video', () => {
+  it('adds a signed player URL for a Bunny intro to the public course', async () => {
+    process.env['BUNNY_STREAM_ENABLED'] = 'true';
+    process.env['BUNNY_STREAM_LIBRARY_ID'] = '750648';
+    process.env['BUNNY_STREAM_TOKEN_KEY'] = 'token-key';
+    const id = '3fc629df-fa2b-4797-b684-bf23e4cdac1c';
+    const service = new CoursesService({
+      isDbConnected: false,
+      inMemoryReviews: [],
+      inMemoryCourses: [
+        {
+          id: 'c-ai',
+          slug: 'ai-receptionist',
+          title: 'AI Receptionist',
+          isPublished: true,
+          isArchived: false,
+          promoVideoUrl: `bunny:${id}`,
+          modules: [],
+        },
+      ],
+    } as any);
+
+    const course: any = await service.findBySlug('ai-receptionist');
+
+    expect(course.promoVideoUrl).toBe(`bunny:${id}`);
+    expect(course.promoEmbedUrl.startsWith(
+      `https://iframe.mediadelivery.net/embed/750648/${id}?token=`,
+    )).toBe(true);
+    expect(course.promoEmbedUrl).toMatch(/\?token=[a-f0-9]{64}&expires=\d+&autoplay=false$/);
+  });
+});
