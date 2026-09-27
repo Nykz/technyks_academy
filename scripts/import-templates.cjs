@@ -18,6 +18,8 @@ const { execFileSync } = require('child_process');
 const MARKETPLACE = process.env.MARKETPLACE_DIR || 'G:/My Drive/technyks courses/English Courses/marketplace';
 const STATE_FILE = process.env.TEMPLATE_IMPORT_STATE || path.join(MARKETPLACE, '.technyks-template-import.json');
 const PIECE = 8 * 1024 * 1024;
+// 1600x900 storefront covers, one per slug (<slug>.jpg).
+const THUMBNAILS = process.env.TEMPLATE_THUMBNAILS_DIR || path.join(__dirname, '..', '..', 'template-thumbnails');
 
 const PLAN = [
   { folder: 'Angular Starter Admin Portal', slug: 'angular-starter-kit', zip: 'Angular-Starter-Template.zip', screenshots: 'screenshots.zip' },
@@ -28,7 +30,38 @@ const PLAN = [
   { folder: 'MazaEats Customer App UI', slug: 'ionic-customer-food-delivery-app-ui-template-standalone-ngmodule', zip: 'Food-delivery-app code.zip', screenshots: 'NEW SCREENSHOTS.zip' },
   { folder: 'MazaEats Driver App UI', slug: 'ionic-8-rider-food-delivery-app-ui-template', zip: 'rider_app_files.zip', screenshots: 'Rider mobile screens.zip' },
   { folder: 'MazaEats Restaurant App UI', slug: 'ionic-8-restaurant-food-delivery-app-ui-template', zip: 'restaurant_app_files.zip', screenshots: 'restaurant mobile screens.zip' },
+  {
+    folder: '',
+    slug: 'ai-receptionist-starter-kit',
+    zip: 'AI Receptionist.zip',
+    // New product, created on the first run. Set the price (INR) first.
+    create: {
+      title: 'AI Receptionist Starter Kit — Claude + n8n MCP Clinic Booking',
+      tagline: 'Ready-made n8n workflows, Supabase SQL and AI prompts for a 24/7 clinic receptionist on WhatsApp, voice and web chat.',
+      description: [
+        'The complete build kit from the Claude + n8n MCP AI Receptionist course: everything you need to run an AI receptionist that books, reschedules and cancels appointments around the clock.',
+        '',
+        'What is inside:',
+        '- n8n workflow JSON for booking, rescheduling, cancellations, reminders and the Google Calendar sync',
+        '- Supabase SQL: schema, seed data and booking functions',
+        '- Agent and voice system prompts, plus email templates',
+        '- WhatsApp (Meta / Twilio), Vapi voice and web chat widget setup guides',
+        '- Operations, go-live checklist, client hand-off and selling / licensing guides',
+        '',
+        "Built around a fictional sample clinic (Sunrise Family Clinic). Replace the sample data with your client's details before going live. Third-party services (n8n, Supabase, Vapi, Meta, Google) are billed on your own or your client's accounts.",
+      ].join('\n'),
+      category: 'AI Automation',
+      tags: ['n8n', 'Claude', 'MCP', 'Supabase', 'Vapi', 'WhatsApp'],
+      price: null,
+      currency: 'INR',
+      previewUrl: '',
+      isPublished: true,
+      isFeatured: true,
+    },
+  },
 ];
+
+const needsPrice = (item) => item.create && item.create.price == null;
 
 function die(message) {
   console.error(`\n✕ ${message}`);
@@ -146,12 +179,18 @@ async function main() {
   if (!plan.length) die(`Nothing matches "${only}".`);
 
   for (const item of plan) {
+    if (needsPrice(item)) {
+      console.log(`• ${item.slug}: skipped until its price is set in scripts/import-templates.cjs`);
+      continue;
+    }
     const dir = path.join(MARKETPLACE, item.folder);
     const zip = path.join(dir, item.zip);
-    for (const file of [zip, path.join(dir, item.screenshots), ...(item.promo ? [path.join(dir, item.promo)] : [])]) {
+    const files = [zip, ...(item.screenshots ? [path.join(dir, item.screenshots)] : []), ...(item.promo ? [path.join(dir, item.promo)] : [])];
+    for (const file of files) {
       if (!fs.existsSync(file)) die(`Missing file: ${file}`);
     }
-    console.log(`• ${item.folder} -> ${item.slug}: ZIP ${(fs.statSync(zip).size / 1e6).toFixed(0)} MB${item.promo ? ', promo video' : ''}${item.clearPreview ? ', remove broken preview link' : ''}`);
+    const cover = fs.existsSync(path.join(THUMBNAILS, `${item.slug}.jpg`)) ? 'new cover, ' : '';
+    console.log(`• ${item.folder || '(marketplace root)'} -> ${item.slug}: ${cover}ZIP ${(fs.statSync(zip).size / 1e6).toFixed(0)} MB${item.promo ? ', promo video' : ''}${item.clearPreview ? ', remove broken preview link' : ''}${item.create ? ', create product' : ''}`);
   }
   if (!apply) {
     console.log('\nPreview only - nothing was changed. Add --apply to upload.');
@@ -164,13 +203,35 @@ async function main() {
   const state = loadState();
 
   for (const item of plan) {
-    console.log(`\n=== ${item.folder}`);
-    const template = templates.find((candidate) => candidate.slug === item.slug);
+    if (needsPrice(item)) continue;
+    console.log(`\n=== ${item.folder || item.slug}`);
+    let template = templates.find((candidate) => candidate.slug === item.slug);
+    if (!template && item.create) {
+      template = await http(`${api}/admin/templates`, {
+        method: 'POST',
+        headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ ...item.create, slug: item.slug }),
+      });
+      console.log('   ✓ product created');
+    }
     if (!template) die(`No template with slug ${item.slug} in the store.`);
     const done = (state[item.slug] ||= {});
     const dir = path.join(MARKETPLACE, item.folder);
 
-    if (!done.gallery) {
+    const cover = path.join(THUMBNAILS, `${item.slug}.jpg`);
+    if (fs.existsSync(cover) && done.thumbnail !== fs.statSync(cover).size) {
+      const url = await uploadImage(api, auth, cover);
+      await http(`${api}/admin/templates/${template.id}`, {
+        method: 'PATCH',
+        headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ thumbnail: url }),
+      });
+      done.thumbnail = fs.statSync(cover).size;
+      saveState(state);
+      console.log('   ✓ new 1600x900 cover image');
+    }
+
+    if (item.screenshots && !done.gallery) {
       const files = prepareScreenshots(path.join(dir, item.screenshots), item.slug);
       console.log(`   uploading ${files.length} screenshots…`);
       const urls = [];
@@ -183,7 +244,7 @@ async function main() {
       done.gallery = urls.length;
       saveState(state);
       console.log(`   ✓ ${urls.length} screenshots in the slideshow`);
-    } else console.log(`   ✓ screenshots already done (${done.gallery})`);
+    } else if (item.screenshots) console.log(`   ✓ screenshots already done (${done.gallery})`);
 
     const zip = path.join(dir, item.zip);
     const zipSize = fs.statSync(zip).size;
