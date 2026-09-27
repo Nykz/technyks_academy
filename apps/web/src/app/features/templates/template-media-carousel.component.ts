@@ -16,7 +16,7 @@ export type CarouselSlide =
   selector: 'app-template-media-carousel',
   imports: [MediaUrlPipe],
   host: {
-    class: 'block',
+    class: 'block min-w-0 w-full',
     '(keydown.arrowleft)': 'previous()',
     '(keydown.arrowright)': 'next()',
   },

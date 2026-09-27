@@ -37,8 +37,8 @@ import {
             {{ error() }}
           </div>
         } @else if (item()) {
-          <div class="mt-8 grid gap-10 lg:grid-cols-[1.4fr_.8fr]">
-            <section>
+          <div class="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,.8fr)]">
+            <section class="min-w-0">
               <app-template-media-carousel
                 [slides]="slides()"
                 [label]="item()!.title"
