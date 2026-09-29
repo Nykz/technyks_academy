@@ -52,7 +52,7 @@ const PLAN = [
       ].join('\n'),
       category: 'AI Automation',
       tags: ['n8n', 'Claude', 'MCP', 'Supabase', 'Vapi', 'WhatsApp'],
-      price: null,
+      price: 999,
       currency: 'INR',
       previewUrl: '',
       isPublished: true,

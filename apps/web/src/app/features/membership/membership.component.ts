@@ -48,10 +48,12 @@ const FALLBACK_PLANS: MembershipPlan[] = [
   },
 ];
 
+import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
+
 @Component({
   selector: 'app-membership',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, LocalPricePipe],
   template: `
     <div class="px-4 sm:px-6 md:px-16 pt-16 sm:pt-20 lg:pt-24 pb-16 sm:pb-20 max-w-7xl mx-auto">
       <div class="text-center max-w-3xl mx-auto mb-10 sm:mb-16">
@@ -83,7 +85,7 @@ const FALLBACK_PLANS: MembershipPlan[] = [
                 <span class="font-['JetBrains_Mono'] text-xs uppercase text-slate-500 dark:text-[#a18d7b] font-bold">STARTER</span>
                 <h2 class="font-['Hanken_Grotesk'] text-2xl font-bold text-slate-900 dark:text-white mt-1 mb-3">{{ plan.name }}</h2>
                 <p class="font-['Inter'] text-sm text-slate-600 dark:text-[#d9c3af] mb-6">{{ plan.description }}</p>
-                <div class="font-['JetBrains_Mono'] text-4xl font-bold text-slate-900 dark:text-white mb-6">₹{{ plan.price.toLocaleString('en-IN') }} <span class="text-xs text-slate-500 dark:text-[#a18d7b] font-normal">/ forever</span></div>
+                <div class="font-['JetBrains_Mono'] text-4xl font-bold text-slate-900 dark:text-white mb-6">{{ plan.price | localPrice }} <span class="text-xs text-slate-500 dark:text-[#a18d7b] font-normal">/ forever</span></div>
                 <ul class="flex flex-col gap-3 font-['Inter'] text-sm text-slate-700 dark:text-[#d9c3af] mb-8">
                   @for (feature of plan.features; track feature) { <li class="flex items-center gap-2"><span class="material-symbols-outlined text-[#2563EB] dark:text-[#3B82F6] text-base">check</span>{{ feature }}</li> }
                 </ul>
@@ -108,7 +110,7 @@ const FALLBACK_PLANS: MembershipPlan[] = [
                 <span class="font-['JetBrains_Mono'] text-xs uppercase text-[#2563EB] dark:text-[#3B82F6] font-bold">{{ isAnnual() ? 'ANNUAL VIP' : 'PRO ENGINEER' }}</span>
                 <h2 class="font-['Hanken_Grotesk'] text-3xl font-bold text-slate-900 dark:text-white mt-1 mb-3">{{ plan.name }}</h2>
                 <p class="font-['Inter'] text-base text-slate-600 dark:text-[#d9c3af] mb-6 max-w-2xl">{{ plan.description }}</p>
-                <div class="font-['JetBrains_Mono'] text-4xl font-bold text-slate-900 dark:text-white mb-6">₹{{ plan.price.toLocaleString('en-IN') }} <span class="text-xs text-slate-500 dark:text-[#a18d7b] font-normal">/ {{ isAnnual() ? 'year' : 'month' }}</span></div>
+                <div class="font-['JetBrains_Mono'] text-4xl font-bold text-slate-900 dark:text-white mb-6">{{ plan.price | localPrice }} <span class="text-xs text-slate-500 dark:text-[#a18d7b] font-normal">/ {{ isAnnual() ? 'year' : 'month' }}</span></div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 font-['Inter'] text-sm text-slate-700 dark:text-[#d9c3af] mb-8">
                   @for (feature of plan.features; track feature) { <div class="flex items-center gap-2"><span class="material-symbols-outlined text-[#2563EB] dark:text-[#3B82F6] text-base">check_circle</span>{{ feature }}</div> }
                 </div>

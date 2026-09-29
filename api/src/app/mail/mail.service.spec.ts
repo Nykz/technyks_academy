@@ -97,3 +97,27 @@ describe('MailService', () => {
     expect(new MailService(configOf(hostinger)).contactInbox).toBe('contact@technyks.com');
   });
 });
+
+describe('emailLayout preview line', () => {
+  it('starts with the message, not the header bar or the repeated heading', async () => {
+    const { emailLayout } = await import('./mail.service');
+    const html = emailLayout(
+      'A new course has been launched',
+      '<p>Hello Asha,</p><p>Use the code VIBE to enroll today.</p>',
+      undefined,
+      undefined,
+      'Use the code VIBE to enroll today.',
+    );
+    const hidden = html.slice(0, html.indexOf('&#847;'));
+    expect(hidden).toContain('display:none');
+    expect(hidden).toContain('Use the code VIBE to enroll today.');
+    expect(hidden).not.toContain('A new course has been launched');
+    expect(html.indexOf('Use the code VIBE')).toBeLessThan(html.indexOf('Technyks Academy</div>'));
+  });
+
+  it('falls back to the body text when no preview is given', async () => {
+    const { emailLayout } = await import('./mail.service');
+    const html = emailLayout('Reset your password', '<p>Use the button below to choose a new password.</p>');
+    expect(html.slice(0, 400)).toContain('Use the button below to choose a new password.');
+  });
+});

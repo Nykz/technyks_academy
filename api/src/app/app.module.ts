@@ -17,6 +17,7 @@ import { SiteSettingsModule } from './site-settings/site-settings.module';
 import { CommunicationModule } from './communication/communication.module';
 import { TemplatesModule } from './templates/templates.module';
 import { MailModule } from './mail/mail.service';
+import { FxModule } from './fx/fx.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { MailModule } from './mail/mail.service';
     SiteSettingsModule,
     CommunicationModule,
     TemplatesModule,
+    FxModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: AccountAwareThrottlerGuard }],

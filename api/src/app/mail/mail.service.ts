@@ -17,14 +17,25 @@ export function emailLayout(
   bodyHtml: string,
   button?: { label: string; url: string },
   footnote?: string,
+  preheader?: string,
 ) {
+  // Inbox lists and phone notifications preview the first text in the email.
+  // Without this hidden line that would be the "Technyks Academy" bar and the
+  // heading, which usually repeats the subject, so the subject showed twice.
+  // The filler characters stop the preview from running into the body.
+  const previewText = (preheader || bodyHtml.replace(/<[^>]+>/g, ' '))
+    .replace(/&[a-z#0-9]+;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 160);
+  const preview = `<div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f4f7fb;mso-hide:all">${escapeHtml(previewText)}${'&#847;&zwnj;&nbsp;'.repeat(90)}</div>`;
   const cta = button
     ? `<p style="margin:28px 0"><a href="${escapeHtml(button.url)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:8px;font-weight:700">${escapeHtml(button.label)}</a></p>`
     : '';
   const note = footnote
     ? `<p style="font-size:12px;line-height:1.5;color:#64748b">${escapeHtml(footnote)}</p>`
     : '';
-  return `<div style="margin:0;background:#f4f7fb;padding:32px 16px;font-family:Arial,sans-serif;color:#172033"><div style="max-width:620px;margin:auto;background:#ffffff;border:1px solid #dce5f2;border-radius:14px;overflow:hidden"><div style="background:#1d4ed8;color:#ffffff;padding:18px 24px;font-weight:700">Technyks Academy</div><div style="padding:28px 24px;font-size:16px;line-height:1.7"><h1 style="font-size:22px;line-height:1.25;margin:0 0 16px">${escapeHtml(heading)}</h1>${bodyHtml}${cta}${note}</div></div></div>`;
+  return `${preview}<div style="margin:0;background:#f4f7fb;padding:32px 16px;font-family:Arial,sans-serif;color:#172033"><div style="max-width:620px;margin:auto;background:#ffffff;border:1px solid #dce5f2;border-radius:14px;overflow:hidden"><div style="background:#1d4ed8;color:#ffffff;padding:18px 24px;font-weight:700">Technyks Academy</div><div style="padding:28px 24px;font-size:16px;line-height:1.7"><h1 style="font-size:22px;line-height:1.25;margin:0 0 16px">${escapeHtml(heading)}</h1>${bodyHtml}${cta}${note}</div></div></div>`;
 }
 
 export interface OutgoingEmail {

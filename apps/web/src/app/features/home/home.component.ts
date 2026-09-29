@@ -14,6 +14,8 @@ import { SkeletonLoaderComponent } from '../../core/components/skeleton/skeleton
 import { SiteSettingsService } from '../../core/services/site-settings.service';
 import { AuthService } from '../../core/services/auth.service';
 
+import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
+
 @Component({
   selector: 'app-home',
   standalone: true,
@@ -22,6 +24,7 @@ import { AuthService } from '../../core/services/auth.service';
     RouterModule,
     CourseCardComponent,
     SkeletonLoaderComponent,
+    LocalPricePipe,
   ],
   template: `
     <div class="flex flex-col gap-16 sm:gap-20 lg:gap-24 pb-16 sm:pb-20 pt-0">
@@ -229,7 +232,7 @@ import { AuthService } from '../../core/services/auth.service';
               </p>
 
               <div class="mb-6 font-['JetBrains_Mono']">
-                <span class="text-3xl font-bold text-white">₹0</span>
+                <span class="text-3xl font-bold text-white">{{ 0 | localPrice }}</span>
                 <span class="text-xs text-[#a18d7b]"> / forever</span>
               </div>
 
@@ -300,7 +303,7 @@ import { AuthService } from '../../core/services/auth.service';
               </p>
 
               <div class="mb-6 font-['JetBrains_Mono']">
-                <span class="text-4xl font-bold text-[#3B82F6]">₹2,499</span>
+                <span class="text-4xl font-bold text-[#3B82F6]">{{ 2499 | localPrice }}</span>
                 <span class="text-xs text-[#a18d7b]"> / month</span>
               </div>
 
@@ -368,7 +371,7 @@ import { AuthService } from '../../core/services/auth.service';
               </p>
 
               <div class="mb-6 font-['JetBrains_Mono']">
-                <span class="text-3xl font-bold text-white">₹19,999</span>
+                <span class="text-3xl font-bold text-white">{{ 19999 | localPrice }}</span>
                 <span class="text-xs text-[#a18d7b]"> / year</span>
               </div>
 

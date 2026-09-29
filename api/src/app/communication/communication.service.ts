@@ -626,6 +626,7 @@ export class CommunicationService {
           `<p>${greeting}</p><p>${this.escapeHtml(body).replace(/\n/g, '<br>')}</p>`,
           { label: 'Open learning dashboard', url: `${appUrl}/dashboard` },
           'You received this update because this email is enrolled in a Technyks Academy course. Reply to this email if you need help.',
+          body,
         ),
       });
       if (ok) sent += 1;

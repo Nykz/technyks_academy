@@ -12,6 +12,8 @@ import {
   TemplateMediaCarouselComponent,
 } from './template-media-carousel.component';
 
+import { LocalPriceService } from '../../core/services/local-price.service';
+
 @Component({
   selector: 'app-template-detail',
   standalone: true,
@@ -191,12 +193,10 @@ export class TemplateDetailComponent implements OnInit {
     this.cart.add(item);
     this.router.navigate(['/cart']);
   }
+  private readonly prices = inject(LocalPriceService);
+  /** Price in the visitor's currency (rupees in India). */
   money(item: UiTemplate) {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: item.currency,
-      maximumFractionDigits: 0,
-    }).format(item.price);
+    return this.prices.format(item.price, item.currency);
   }
   isDirectVideo(value: unknown) {
     const url = String(value || '')

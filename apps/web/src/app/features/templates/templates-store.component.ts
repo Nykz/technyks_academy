@@ -9,6 +9,8 @@ import {
 } from '../../core/services/templates.service';
 import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 
+import { LocalPriceService } from '../../core/services/local-price.service';
+
 @Component({
   selector: 'app-templates-store',
   standalone: true,
@@ -227,11 +229,9 @@ export class TemplatesStoreComponent implements OnInit {
     this.cart.add(item);
   }
 
+  private readonly prices = inject(LocalPriceService);
+  /** Price in the visitor's currency (rupees in India). */
   money(item: UiTemplate) {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: item.currency,
-      maximumFractionDigits: 0,
-    }).format(item.price);
+    return this.prices.format(item.price, item.currency);
   }
 }

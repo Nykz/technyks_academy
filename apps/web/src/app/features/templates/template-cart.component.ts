@@ -5,6 +5,8 @@ import { TemplateCartService } from '../../core/services/template-cart.service';
 import { TemplatesService } from '../../core/services/templates.service';
 import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 
+import { LocalPriceService } from '../../core/services/local-price.service';
+
 @Component({
   selector: 'app-template-cart',
   standalone: true,
@@ -129,11 +131,9 @@ export class TemplateCartComponent implements OnInit {
       .list()
       .subscribe({ next: (items) => this.cart.syncWithCatalog(items) });
   }
+  private readonly prices = inject(LocalPriceService);
+  /** Price in the visitor's currency (rupees in India). */
   money(price: number, currency: string) {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 0,
-    }).format(price);
+    return this.prices.format(price, currency);
   }
 }

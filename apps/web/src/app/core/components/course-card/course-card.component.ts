@@ -3,10 +3,12 @@ import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { Course } from '../../services/courses.service';
 
+import { LocalPricePipe } from '../../pipes/local-price.pipe';
+
 @Component({
   selector: 'app-course-card',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, LocalPricePipe],
   template: `
     <article class="bg-[#121A2B] border border-[#1E293B] rounded-lg flex flex-col overflow-hidden group hover:border-[#3B82F6] transition-all shadow-xl h-full">
       <a [routerLink]="['/courses', course.slug]" class="flex flex-col flex-1">
@@ -57,7 +59,7 @@ import { Course } from '../../services/courses.service';
 
       <div class="px-5 py-4 flex items-center justify-between border-t border-[#1E293B]/40 bg-[#0b0f10]/40">
         <div class="font-['JetBrains_Mono'] text-lg font-bold text-[#3B82F6]">
-          {{ course.isFree ? 'FREE' : '₹' + course.price.toLocaleString('en-IN') }}
+          {{ course.isFree ? 'FREE' : (course.price | localPrice) }}
         </div>
         <a
           [routerLink]="['/courses', course.slug]"

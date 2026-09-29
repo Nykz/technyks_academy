@@ -13,6 +13,8 @@ import { CoursesService } from '../../core/services/courses.service';
 import { TemplateCartService } from '../../core/services/template-cart.service';
 import { TemplatesService } from '../../core/services/templates.service';
 
+import { LocalPriceService } from '../../core/services/local-price.service';
+
 @Component({
   selector: 'app-checkout',
   standalone: true,
@@ -166,6 +168,12 @@ import { TemplatesService } from '../../core/services/templates.service';
               <span class="text-xs uppercase text-[#a18d7b]">Total Payable:</span>
               <span class="text-2xl font-bold text-[#3B82F6]">₹{{ finalAmount().toLocaleString('en-IN') }}</span>
             </div>
+            @if (prices.isConverted() && finalAmount() > 0) {
+              <p class="-mt-4 mb-6 text-xs text-slate-500 dark:text-[#a18d7b]">
+                About {{ prices.format(finalAmount()) }} in your currency. You'll be charged
+                {{ prices.formatInr(finalAmount()) }} (Indian rupees); your bank converts it.
+              </p>
+            }
           </div>
 
           @if (summaryError() || paymentError()) { <p role="alert" class="mb-4 rounded p-3 bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200 text-sm">{{ summaryError() || paymentError() }}</p> }
@@ -188,6 +196,7 @@ import { TemplatesService } from '../../core/services/templates.service';
   `,
 })
 export class CheckoutComponent implements OnInit {
+  readonly prices = inject(LocalPriceService);
   private zone = inject(NgZone);
   private enrollmentsService = inject(EnrollmentsService);
   private route = inject(ActivatedRoute);

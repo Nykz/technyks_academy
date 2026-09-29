@@ -111,10 +111,12 @@ const FALLBACK_PLANS: MembershipPlan[] = [
   },
 ];
 
+import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
+
 @Component({
   selector: 'app-onboarding',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, LocalPricePipe],
   template: `
     <main class="onboarding-page h-dvh overflow-hidden p-0 lg:p-5">
       <section class="mx-auto h-full w-full max-w-6xl overflow-hidden border border-slate-200 bg-white shadow-2xl dark:border-[#26334B] dark:bg-[#101827] lg:rounded-3xl">
@@ -184,7 +186,7 @@ const FALLBACK_PLANS: MembershipPlan[] = [
                     <button type="button" (click)="membershipPreference.set(plan.slug)" class="choice-card flex items-center gap-4 text-left" [class.choice-selected]="membershipPreference() === plan.slug">
                       <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-[#2563EB] dark:bg-blue-950/60"><span class="material-symbols-outlined">{{ plan.isFree ? 'person' : 'workspace_premium' }}</span></span>
                       <span class="min-w-0 flex-1"><span class="block font-['Hanken_Grotesk'] text-base font-bold text-slate-900 dark:text-white">{{ plan.name }}</span><span class="mt-1 block text-xs text-slate-600 dark:text-slate-300">{{ plan.description }}</span></span>
-                      <span class="shrink-0 font-['JetBrains_Mono'] text-sm font-bold text-slate-900 dark:text-white">{{ plan.isFree ? '₹0' : '₹' + plan.price.toLocaleString('en-IN') }}<span class="block text-[9px] font-normal uppercase text-slate-500">{{ plan.isFree ? 'forever' : plan.interval }}</span></span>
+                      <span class="shrink-0 font-['JetBrains_Mono'] text-sm font-bold text-slate-900 dark:text-white">{{ plan.isFree ? (0 | localPrice) : (plan.price | localPrice) }}<span class="block text-[9px] font-normal uppercase text-slate-500">{{ plan.isFree ? 'forever' : plan.interval }}</span></span>
                     </button>
                   }
                 </div>

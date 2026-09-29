@@ -9,10 +9,12 @@ import { AuthService } from '../../core/services/auth.service';
 import { EnrollmentsService } from '../../core/services/enrollments.service';
 import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 
+import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
+
 @Component({
   selector: 'app-course-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, MediaUrlPipe],
+  imports: [CommonModule, FormsModule, RouterModule, MediaUrlPipe, LocalPricePipe],
   template: `
     @if (isLoading()) {
       <div class="min-h-[70vh] flex items-center justify-center">
@@ -224,7 +226,7 @@ import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
                   } @else {
                     <span
                       class="font-['JetBrains_Mono'] text-3xl font-bold text-slate-900 dark:text-white"
-                      >₹{{ course()?.price?.toLocaleString('en-IN') }}</span
+                      >{{ course()?.price | localPrice }}</span
                     >
                     <span
                       class="font-['JetBrains_Mono'] text-xs text-[#2563EB] dark:text-[#3B82F6] font-semibold"
