@@ -530,6 +530,7 @@ export class CommunicationService {
       const users = await this.prisma.user.findMany({
         where: {
           role: 'STUDENT',
+          emailAnnouncements: true,
           enrollments: {
             some: courseIds.length ? { courseId: { in: courseIds } } : {},
           },
@@ -547,7 +548,12 @@ export class CommunicationService {
         .map((enrollment) => enrollment.userId),
     );
     return this.prisma.inMemoryUsers
-      .filter((user) => user.role === 'STUDENT' && allowed.has(user.id))
+      .filter(
+        (user) =>
+          user.role === 'STUDENT' &&
+          user.emailAnnouncements !== false &&
+          allowed.has(user.id),
+      )
       .map((user) => ({ id: user.id, name: user.name, email: user.email }));
   }
 

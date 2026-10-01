@@ -13,6 +13,7 @@ import {
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { UserAvatarComponent } from '../../core/components/user-avatar/user-avatar.component';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import {
   EnrollmentsService,
@@ -29,7 +30,7 @@ import {
 @Component({
   selector: 'app-watch',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, UserAvatarComponent],
   template: `
     <div class="watch-shell pt-16 min-h-screen flex flex-col md:flex-row overflow-x-hidden">
       <!-- Main Video Player Container -->
@@ -228,7 +229,7 @@ import {
                       @for (question of filteredQuestions(); track question.id) {
                         <article class="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#26334B] dark:bg-[#0B111D] sm:p-5">
                           <div class="flex gap-3">
-                            <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">{{ initials(question.user.name) }}</div>
+                            <app-user-avatar [name]="question.user.name" [src]="question.user.avatarUrl" [size]="36" />
                             <div class="min-w-0 flex-1">
                               <div class="flex flex-wrap items-start justify-between gap-2"><h3 class="font-['Hanken_Grotesk'] text-base font-bold text-slate-950 dark:text-white">{{ question.title }}</h3><span class="rounded-full px-2 py-1 font-['JetBrains_Mono'] text-[9px] font-bold uppercase" [class.bg-emerald-100]="question.status !== 'OPEN'" [class.text-emerald-700]="question.status !== 'OPEN'" [class.bg-amber-100]="question.status === 'OPEN'" [class.text-amber-700]="question.status === 'OPEN'">{{ question.status }}</span></div>
                               <p class="mt-1 text-xs text-slate-500">{{ question.user.name }} · {{ relativeDate(question.createdAt) }}@if (question.lessonTitle) {<span> · {{ question.lessonTitle }}</span>}</p>
@@ -238,7 +239,7 @@ import {
                                 <div class="mt-4 space-y-3 border-l-2 border-blue-100 pl-4 dark:border-blue-950">
                                   @for (reply of question.replies; track reply.id) {
                                     <div class="rounded-lg bg-slate-50 p-3 dark:bg-[#121C2F]">
-                                      <div class="flex flex-wrap items-center gap-2 text-xs"><strong class="text-slate-900 dark:text-white">{{ reply.user.name }}</strong>@if (reply.isInstructor) {<span class="rounded bg-[#2563EB] px-1.5 py-0.5 font-['JetBrains_Mono'] text-[8px] font-bold uppercase !text-white">Instructor</span>}<span class="text-slate-400">{{ relativeDate(reply.createdAt) }}</span></div>
+                                      <div class="flex flex-wrap items-center gap-2 text-xs"><app-user-avatar [name]="reply.user.name" [src]="reply.user.avatarUrl" [size]="24" /><strong class="text-slate-900 dark:text-white">{{ reply.user.name }}</strong>@if (reply.isInstructor) {<span class="rounded bg-[#2563EB] px-1.5 py-0.5 font-['JetBrains_Mono'] text-[8px] font-bold uppercase !text-white">Instructor</span>}<span class="text-slate-400">{{ relativeDate(reply.createdAt) }}</span></div>
                                       <p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700 dark:text-slate-300">{{ reply.body }}</p>
                                     </div>
                                   }

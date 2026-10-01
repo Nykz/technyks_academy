@@ -140,6 +140,19 @@ export const appRoutes: Routes = [
       ),
   },
   {
+    path: 'account',
+    pathMatch: 'full',
+    redirectTo: 'account/profile',
+  },
+  {
+    path: 'account/:section',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/account/account-settings.component').then(
+        (m) => m.AccountSettingsComponent,
+      ),
+  },
+  {
     path: 'certificate/:number',
     loadComponent: () =>
       import('./features/certificates/certificate-verify.component').then(

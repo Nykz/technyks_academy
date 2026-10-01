@@ -50,6 +50,14 @@ export const serverRoutes: ServerRoute[] = [
     renderMode: RenderMode.Client,
   },
   {
+    path: 'account',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'account/:section',
+    renderMode: RenderMode.Client,
+  },
+  {
     path: 'certificate/:number',
     renderMode: RenderMode.Client,
   },

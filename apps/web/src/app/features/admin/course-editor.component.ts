@@ -10,6 +10,7 @@ import {
   Lesson,
   salePercentOff,
 } from '../../core/services/courses.service';
+import { UserAvatarComponent } from '../../core/components/user-avatar/user-avatar.component';
 import {
   AdminService,
   Coupon,
@@ -20,7 +21,7 @@ import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 @Component({
   selector: 'app-course-editor',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, MediaUrlPipe],
+  imports: [CommonModule, FormsModule, RouterModule, MediaUrlPipe, UserAvatarComponent],
   template: `
     <div class="admin-shell min-h-screen bg-[#040810] text-[#e0e3e5] flex flex-col overflow-x-hidden">
       <!-- Top Header Navigation & Status Bar -->
@@ -554,7 +555,7 @@ import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
                       @for (student of courseStudents(); track student.id) {
                         <tr class="bg-[#121A2B] hover:bg-[#172033] transition-colors">
                           <td class="px-5 py-4">
-                            <div class="flex items-center gap-3"><span class="w-9 h-9 rounded-full bg-[#3B82F6]/15 text-[#3B82F6] grid place-items-center font-bold">{{ student.name.charAt(0).toUpperCase() }}</span><div><div class="text-sm font-semibold text-white">{{ student.name }}</div><div class="text-[11px] text-[#a18d7b]">{{ student.email }}</div></div></div>
+                            <div class="flex items-center gap-3"><app-user-avatar [name]="student.name" [src]="student.avatarUrl" [size]="36" /><div><div class="text-sm font-semibold text-white">{{ student.name }}</div><div class="text-[11px] text-[#a18d7b]">{{ student.email }}</div></div></div>
                           </td>
                           <td class="px-5 py-4 text-xs text-[#d9c3af]">{{ student.enrolledAt | date:'mediumDate' }}</td>
                           <td class="px-5 py-4 text-xs text-[#d9c3af]">{{ student.lastVisited | date:'medium' }}</td>

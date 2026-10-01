@@ -48,6 +48,16 @@ model User {
   learnerGoal          String?
   experienceLevel      String?
   membershipPreference String?
+  /// Public profile (Account settings > Profile).
+  headline             String?              @db.VarChar(120)
+  bio                  String?              @db.Text
+  websiteUrl           String?
+  linkedinUrl          String?
+  githubUrl            String?
+  twitterUrl           String?
+  youtubeUrl           String?
+  /// Email me course announcements (Account settings > Notifications).
+  emailAnnouncements   Boolean              @default(true)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   enrollments          Enrollment[]

@@ -8,7 +8,7 @@ export interface User {
   email: string;
   name: string;
   role: 'STUDENT' | 'ADMIN';
-  avatarUrl?: string;
+  avatarUrl?: string | null;
   onboardingCompleted?: boolean;
   learnerGoal?: string | null;
   experienceLevel?: string | null;
@@ -149,6 +149,12 @@ export class AuthService {
     } catch {
       // Session persistence is optional; the in-memory signal still works.
     }
+  }
+
+  /** Applies account changes (name, photo) to the signed-in user everywhere. */
+  updateCachedUser(changes: Partial<User>) {
+    const current = this.currentUser();
+    if (current) this.persistUser({ ...current, ...changes });
   }
 
   private persistUser(user: User) {

@@ -1,14 +1,15 @@
-import { Component, signal, inject } from '@angular/core';
+import { Component, ElementRef, HostListener, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { ThemeService } from '../../services/theme.service';
 import { TemplateCartService } from '../../services/template-cart.service';
+import { UserAvatarComponent } from '../user-avatar/user-avatar.component';
 
 @Component({
   selector: 'app-nav',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, UserAvatarComponent],
   host: { class: 'relative block' },
   template: `
     <nav class="relative w-full z-40 transition-colors duration-200 border-b flex justify-between items-center h-16 px-3 sm:px-5 md:px-8 xl:px-12 max-w-full backdrop-blur-xl bg-white/90 border-slate-200/80 text-slate-800 dark:bg-[#040810]/90 dark:border-white/10 dark:text-white shadow-sm">
@@ -64,24 +65,49 @@ import { TemplateCartService } from '../../services/template-cart.service';
           <span class="material-symbols-outlined text-[18px]" aria-hidden="true">{{ themeService.isDarkMode() ? 'dark_mode' : 'light_mode' }}</span>
         </button>
 
-        <!-- Profile Avatar Button -->
-        <a
-          routerLink="/dashboard"
-          class="hidden lg:inline-grid h-9 w-9 place-items-center rounded-full border border-slate-200 text-slate-600 hover:text-[#2563EB] hover:border-[#2563EB] bg-white transition-all dark:border-white/15 dark:text-slate-300 dark:bg-[#0b101d] dark:hover:text-white dark:hover:border-white/30 shadow-sm"
-          [attr.aria-label]="'Open dashboard for ' + (authService.currentUser()?.name || 'your account')"
-          [title]="authService.currentUser()?.name || 'Open your dashboard'"
-        >
-          <span class="material-symbols-outlined text-[19px]">account_circle</span>
-        </a>
-
-        <!-- Auth Button (LOGOUT / LOGIN) -->
+        <!-- Profile menu (signed in) / Login -->
         @if (authService.isAuthenticated()) {
-          <button
-            (click)="authService.logout()"
-            class="hidden lg:inline-flex font-['JetBrains_Mono'] text-xs uppercase tracking-wider font-bold !text-white px-5 py-2.5 rounded-lg transition-all shadow-sm bg-[#2563EB] hover:bg-[#1D4ED8]"
-          >
-            Logout
-          </button>
+          <div class="relative hidden lg:block" data-profile-menu>
+            <button
+              type="button"
+              (click)="toggleProfileMenu()"
+              class="flex items-center rounded-full ring-offset-2 transition hover:ring-2 hover:ring-[#2563EB] focus-visible:ring-2 focus-visible:ring-[#2563EB]"
+              [attr.aria-expanded]="isProfileMenuOpen()"
+              aria-haspopup="menu"
+              [attr.aria-label]="'Account menu for ' + (authService.currentUser()?.name || 'your account')"
+            >
+              <app-user-avatar [name]="authService.currentUser()?.name" [src]="authService.currentUser()?.avatarUrl" [size]="36" />
+            </button>
+            @if (isProfileMenuOpen()) {
+              <div class="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800 shadow-2xl dark:border-white/10 dark:bg-[#0f172a] dark:text-slate-100" role="menu">
+                <a routerLink="/account/profile" (click)="closeProfileMenu()" class="flex items-center gap-3 border-b border-slate-200 p-4 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5" role="menuitem">
+                  <app-user-avatar [name]="authService.currentUser()?.name" [src]="authService.currentUser()?.avatarUrl" [size]="56" />
+                  <span class="min-w-0">
+                    <span class="block truncate text-sm font-bold">{{ authService.currentUser()?.name }}</span>
+                    <span class="block truncate text-xs text-slate-500 dark:text-slate-400">{{ authService.currentUser()?.email }}</span>
+                  </span>
+                </a>
+                <div class="flex flex-col py-2 text-sm">
+                  <a routerLink="/dashboard" (click)="closeProfileMenu()" class="px-4 py-2 hover:bg-slate-50 hover:text-[#2563EB] dark:hover:bg-white/5" role="menuitem">My learning</a>
+                  <a routerLink="/dashboard" fragment="certificates" (click)="closeProfileMenu()" class="px-4 py-2 hover:bg-slate-50 hover:text-[#2563EB] dark:hover:bg-white/5" role="menuitem">My certificates</a>
+                  <a routerLink="/cart" (click)="closeProfileMenu()" class="px-4 py-2 hover:bg-slate-50 hover:text-[#2563EB] dark:hover:bg-white/5" role="menuitem">My cart</a>
+                  @if (authService.isAdmin()) {
+                    <a routerLink="/admin" (click)="closeProfileMenu()" class="px-4 py-2 hover:bg-slate-50 hover:text-[#2563EB] dark:hover:bg-white/5" role="menuitem">Admin panel</a>
+                  }
+                </div>
+                <div class="flex flex-col border-t border-slate-200 py-2 text-sm dark:border-white/10">
+                  <a routerLink="/account/profile" (click)="closeProfileMenu()" class="px-4 py-2 hover:bg-slate-50 hover:text-[#2563EB] dark:hover:bg-white/5" role="menuitem">Edit profile</a>
+                  <a routerLink="/account/photo" (click)="closeProfileMenu()" class="px-4 py-2 hover:bg-slate-50 hover:text-[#2563EB] dark:hover:bg-white/5" role="menuitem">Profile photo</a>
+                  <a routerLink="/account/security" (click)="closeProfileMenu()" class="px-4 py-2 hover:bg-slate-50 hover:text-[#2563EB] dark:hover:bg-white/5" role="menuitem">Account settings</a>
+                  <a routerLink="/account/notifications" (click)="closeProfileMenu()" class="px-4 py-2 hover:bg-slate-50 hover:text-[#2563EB] dark:hover:bg-white/5" role="menuitem">Notification preferences</a>
+                  <a routerLink="/account/purchases" (click)="closeProfileMenu()" class="px-4 py-2 hover:bg-slate-50 hover:text-[#2563EB] dark:hover:bg-white/5" role="menuitem">Purchase history</a>
+                </div>
+                <div class="border-t border-slate-200 py-2 text-sm dark:border-white/10">
+                  <button type="button" (click)="closeProfileMenu(); authService.logout()" class="w-full px-4 py-2 text-left hover:bg-slate-50 hover:text-[#2563EB] dark:hover:bg-white/5" role="menuitem">Log out</button>
+                </div>
+              </div>
+            }
+          </div>
         } @else {
           <a
             routerLink="/auth/login"
@@ -125,9 +151,24 @@ import { TemplateCartService } from '../../services/template-cart.service';
 
         @if (authService.isAuthenticated()) {
           <div class="pt-2 flex flex-col gap-3">
+            <a routerLink="/account/profile" (click)="closeMobileMenu()" class="flex items-center gap-3 py-2">
+              <app-user-avatar [name]="authService.currentUser()?.name" [src]="authService.currentUser()?.avatarUrl" [size]="40" />
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-bold text-slate-900 dark:text-white">{{ authService.currentUser()?.name }}</span>
+                <span class="block truncate text-xs text-slate-500 dark:text-slate-400">{{ authService.currentUser()?.email }}</span>
+              </span>
+            </a>
             <a routerLink="/dashboard" (click)="closeMobileMenu()" class="text-slate-700 dark:text-slate-200 font-['JetBrains_Mono'] text-xs uppercase flex items-center gap-2 py-2">
-              <span class="material-symbols-outlined text-[20px]">account_circle</span>
-              My dashboard
+              <span class="material-symbols-outlined text-[20px]">school</span>
+              My learning
+            </a>
+            <a routerLink="/account/profile" (click)="closeMobileMenu()" class="text-slate-700 dark:text-slate-200 font-['JetBrains_Mono'] text-xs uppercase flex items-center gap-2 py-2">
+              <span class="material-symbols-outlined text-[20px]">settings</span>
+              Account settings
+            </a>
+            <a routerLink="/account/purchases" (click)="closeMobileMenu()" class="text-slate-700 dark:text-slate-200 font-['JetBrains_Mono'] text-xs uppercase flex items-center gap-2 py-2">
+              <span class="material-symbols-outlined text-[20px]">receipt_long</span>
+              Purchase history
             </a>
             <button (click)="authService.logout(); closeMobileMenu()" class="text-center font-['JetBrains_Mono'] text-xs uppercase text-red-500 border border-red-300 dark:border-red-500/40 py-2.5 rounded-full">
               Logout
@@ -149,6 +190,28 @@ export class NavComponent {
   themeService = inject(ThemeService);
   cart = inject(TemplateCartService);
   isMobileMenuOpen = signal<boolean>(false);
+  isProfileMenuOpen = signal(false);
+  private readonly host = inject(ElementRef<HTMLElement>);
+
+  toggleProfileMenu() {
+    this.isProfileMenuOpen.update((open) => !open);
+  }
+
+  closeProfileMenu() {
+    this.isProfileMenuOpen.set(false);
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent) {
+    if (!this.isProfileMenuOpen()) return;
+    const menu = this.host.nativeElement.querySelector('[data-profile-menu]');
+    if (menu && !menu.contains(event.target as Node)) this.closeProfileMenu();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape() {
+    this.closeProfileMenu();
+  }
 
   toggleMobileMenu() {
     this.isMobileMenuOpen.update(val => !val);

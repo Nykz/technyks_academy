@@ -133,6 +133,14 @@ export class PrismaService
       },
       { table: 'Payment', sql: 'ADD COLUMN `templateProductIds` JSON NULL' },
       { table: 'Course', sql: 'ADD COLUMN `salePrice` DOUBLE NULL' },
+      { table: 'User', sql: 'ADD COLUMN `headline` VARCHAR(120) NULL' },
+      { table: 'User', sql: 'ADD COLUMN `bio` TEXT NULL' },
+      { table: 'User', sql: 'ADD COLUMN `websiteUrl` VARCHAR(191) NULL' },
+      { table: 'User', sql: 'ADD COLUMN `linkedinUrl` VARCHAR(191) NULL' },
+      { table: 'User', sql: 'ADD COLUMN `githubUrl` VARCHAR(191) NULL' },
+      { table: 'User', sql: 'ADD COLUMN `twitterUrl` VARCHAR(191) NULL' },
+      { table: 'User', sql: 'ADD COLUMN `youtubeUrl` VARCHAR(191) NULL' },
+      { table: 'User', sql: 'ADD COLUMN `emailAnnouncements` BOOLEAN NOT NULL DEFAULT true' },
     ];
 
     for (const addition of additions) {

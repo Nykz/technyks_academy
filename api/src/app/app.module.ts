@@ -19,6 +19,7 @@ import { TemplatesModule } from './templates/templates.module';
 import { MailModule } from './mail/mail.service';
 import { FxModule } from './fx/fx.module';
 import { CertificatesModule } from './certificates/certificates.module';
+import { AccountModule } from './account/account.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { CertificatesModule } from './certificates/certificates.module';
     TemplatesModule,
     FxModule,
     CertificatesModule,
+    AccountModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: AccountAwareThrottlerGuard }],

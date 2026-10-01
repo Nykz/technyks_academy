@@ -10,11 +10,12 @@ import { Certificate, EnrollmentsService } from '../../core/services/enrollments
 import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 
 import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
+import { UserAvatarComponent } from '../../core/components/user-avatar/user-avatar.component';
 
 @Component({
   selector: 'app-course-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, MediaUrlPipe, LocalPricePipe],
+  imports: [CommonModule, FormsModule, RouterModule, MediaUrlPipe, LocalPricePipe, UserAvatarComponent],
   template: `
     @if (isLoading()) {
       <div class="min-h-[70vh] flex items-center justify-center">
@@ -615,11 +616,7 @@ import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
                           class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3"
                         >
                           <div class="flex items-center gap-3">
-                            <div
-                              class="w-9 h-9 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] text-white dark:text-[#040810] font-bold flex items-center justify-center text-sm shadow-sm"
-                            >
-                              {{ review.user.name.charAt(0).toUpperCase() }}
-                            </div>
+                            <app-user-avatar [name]="review.user.name" [src]="review.user.avatarUrl" [size]="40" />
                             <div>
                               <div
                                 class="font-['Hanken_Grotesk'] text-sm font-bold text-slate-900 dark:text-white"

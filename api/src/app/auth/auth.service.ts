@@ -25,6 +25,15 @@ const EXPERIENCE_LEVELS = new Set([
   'working-developer',
 ]);
 
+/**
+ * The avatar after a Google sign-in: Google's photo, unless the student has
+ * uploaded their own (which always wins).
+ */
+export function googleAvatarFor(current: string | null | undefined, google: string | null) {
+  const isGooglePhoto = !current || /googleusercontent\.com/i.test(current);
+  return isGooglePhoto ? google || current || null : current;
+}
+
 @Injectable()
 export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
@@ -258,7 +267,7 @@ export class AuthService implements OnModuleInit {
           data: {
             googleId,
             name: user.name || name,
-            avatarUrl: avatarUrl || user.avatarUrl,
+            avatarUrl: googleAvatarFor(user.avatarUrl, avatarUrl),
           },
         });
       } else {
@@ -275,7 +284,7 @@ export class AuthService implements OnModuleInit {
       if (user) {
         Object.assign(user, {
           googleId,
-          avatarUrl: avatarUrl || user.avatarUrl,
+          avatarUrl: googleAvatarFor(user.avatarUrl, avatarUrl),
         });
       } else {
         isNewUser = true;
