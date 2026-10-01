@@ -53,6 +53,8 @@ export interface Course {
   /** Signed Bunny player URL when promoVideoUrl is "bunny:<id>". */
   promoEmbedUrl?: string | null;
   price: number;
+  /** Discounted price; when set, cards show `price` struck through. */
+  salePrice?: number | null;
   isFree: boolean;
   currency: string;
   level: string;
@@ -536,6 +538,7 @@ export class CoursesService {
       thumbnail: this.normaliseThumbnail(course.thumbnail),
       promoVideoUrl: this.normaliseMediaUrl(course.promoVideoUrl),
       price: Number(course.price || 0),
+      salePrice: activeSalePrice(course),
       isFree: Boolean(course.isFree ?? Number(course.price || 0) === 0),
       currency: course.currency || 'INR',
       level: course.level || 'Intermediate',
@@ -606,4 +609,27 @@ export class CoursesService {
     const url = String(value || '').trim();
     return url || undefined;
   }
+}
+
+/** The sale price when it is set and below the main price, otherwise null. */
+export function activeSalePrice(course: { price?: unknown; salePrice?: unknown; isFree?: boolean } | null | undefined): number | null {
+  if (!course || course.isFree) return null;
+  const raw = course.salePrice;
+  if (raw === null || raw === undefined || raw === '') return null;
+  const sale = Number(raw);
+  const price = Number(course.price || 0);
+  return Number.isFinite(sale) && sale >= 0 && sale < price ? sale : null;
+}
+
+/** What a student pays before coupons. */
+export function payablePrice(course: { price?: unknown; salePrice?: unknown; isFree?: boolean } | null | undefined): number {
+  if (!course || course.isFree) return 0;
+  return activeSalePrice(course) ?? Number(course.price || 0);
+}
+
+/** Whole-number discount, e.g. 50 for ₹999 → ₹500. */
+export function salePercentOff(course: { price?: unknown; salePrice?: unknown; isFree?: boolean } | null | undefined): number {
+  const sale = activeSalePrice(course);
+  const price = Number(course?.price || 0);
+  return sale === null || !price ? 0 : Math.round((1 - sale / price) * 100);
 }

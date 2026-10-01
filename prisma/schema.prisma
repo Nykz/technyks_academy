@@ -70,6 +70,8 @@ model Course {
   thumbnail        String?
   promoVideoUrl    String?                  @db.Text
   price            Float
+  /// Optional discounted price; shown with the main price struck through.
+  salePrice        Float?
   isFree           Boolean                  @default(false)
   currency         String                   @default("INR")
   level            String                   @default("Intermediate")

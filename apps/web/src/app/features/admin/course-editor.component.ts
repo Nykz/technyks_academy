@@ -8,6 +8,7 @@ import {
   Course,
   Module,
   Lesson,
+  salePercentOff,
 } from '../../core/services/courses.service';
 import {
   AdminService,
@@ -366,6 +367,25 @@ import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
                   />
                 </div>
 
+                <div>
+                  <label for="course-sale-price-basic" class="block font-['JetBrains_Mono'] text-xs text-[#a18d7b] uppercase mb-1">
+                    Sale Price (₹)
+                  </label>
+                  <input
+                    id="course-sale-price-basic"
+                    type="number"
+                    min="0"
+                    [disabled]="!!course()?.isFree"
+                    [ngModel]="course()?.salePrice"
+                    (ngModelChange)="updateSalePrice($event)"
+                    placeholder="Optional, e.g. 499"
+                    class="w-full bg-[#040810] border border-[#1E293B] focus:border-[#3B82F6] rounded-lg px-4 py-2.5 text-xs text-emerald-400 font-bold outline-none font-['JetBrains_Mono'] disabled:opacity-40"
+                  />
+                  @if (saleError()) {
+                    <p class="font-['Inter'] text-[11px] text-[#ffb4ab] mt-1">{{ saleError() }}</p>
+                  }
+                </div>
+
                 <div class="flex flex-col justify-end pb-2">
                   <label class="inline-flex items-center gap-2 cursor-pointer font-['Inter'] text-xs text-white">
                     <input
@@ -582,6 +602,26 @@ import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
                   (ngModelChange)="updateCourseField('price', $event)"
                   class="w-full bg-[#040810] border border-[#1E293B] rounded px-4 py-2.5 text-sm text-[#3B82F6] font-['JetBrains_Mono'] font-bold"
                 />
+                <p class="font-['Inter'] text-xs text-[#a18d7b] mt-1">Regular price. Shown struck through when a sale price is set.</p>
+                </div>
+                <div>
+                <label for="course-sale-price" class="block font-['JetBrains_Mono'] text-xs text-[#a18d7b] uppercase mb-1">Sale Price (₹ INR) · optional</label>
+                <input
+                  id="course-sale-price"
+                  type="number"
+                  min="0"
+                  [ngModel]="course()?.salePrice"
+                  (ngModelChange)="updateSalePrice($event)"
+                  placeholder="Leave empty for no sale"
+                  class="w-full bg-[#040810] border border-[#1E293B] rounded px-4 py-2.5 text-sm text-emerald-400 font-['JetBrains_Mono'] font-bold"
+                />
+                @if (saleError()) {
+                  <p class="font-['Inter'] text-xs text-[#ffb4ab] mt-1">{{ saleError() }}</p>
+                } @else if (salePreviewOff()) {
+                  <p class="font-['Inter'] text-xs text-emerald-400 mt-1">Students pay ₹{{ course()?.salePrice }} · card shows {{ salePreviewOff() }}% OFF with ₹{{ course()?.price }} struck through.</p>
+                } @else {
+                  <p class="font-['Inter'] text-xs text-[#a18d7b] mt-1">Clear this box to end the sale.</p>
+                }
                 </div>
               } @else {
                 <div class="border border-[#3B82F6]/40 bg-[#3B82F6]/10 rounded-lg p-4 font-['JetBrains_Mono'] text-xs text-[#3B82F6]">
@@ -719,10 +759,33 @@ export class CourseEditorComponent implements OnInit {
     }
   }
 
+  updateSalePrice(value: unknown) {
+    const empty = value === null || value === undefined || value === '';
+    this.updateCourseField('salePrice', empty ? null : Number(value));
+  }
+
+  /** Sale price problems that would make the server ignore it. */
+  saleError(): string {
+    const course = this.course();
+    const raw = course?.salePrice;
+    if (!course || course.isFree || raw === null || raw === undefined || (raw as any) === '') return '';
+    const sale = Number(raw);
+    if (!Number.isFinite(sale) || sale < 0) return 'Sale price must be 0 or more.';
+    if (sale >= Number(course.price || 0)) return 'Sale price must be lower than the regular price, otherwise it is ignored.';
+    return '';
+  }
+
+  salePreviewOff(): number {
+    return salePercentOff(this.course());
+  }
+
   toggleFreeCourse(event: Event) {
     const isFree = (event.target as HTMLInputElement).checked;
     this.updateCourseField('isFree', isFree);
-    if (isFree) this.updateCourseField('price', 0);
+    if (isFree) {
+      this.updateCourseField('price', 0);
+      this.updateCourseField('salePrice', null);
+    }
   }
 
   handleThumbnailFile(event: Event) {

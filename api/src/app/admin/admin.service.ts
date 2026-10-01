@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { parseBunnyVideoRef } from '../video/bunny-embed';
 import { JAVASCRIPT_COURSE } from '../courses/javascript-course.data';
+import { normaliseSalePrice } from '../courses/course-price';
 
 const COURSE_INCLUDE = {
   modules: {
@@ -453,6 +454,7 @@ export class AdminService {
             thumbnail: fields.thumbnail,
             promoVideoUrl: fields.promoVideoUrl,
             price: fields.price,
+            salePrice: fields.salePrice,
             isFree: fields.isFree,
             currency: fields.currency,
             level: fields.level,
@@ -578,6 +580,7 @@ export class AdminService {
             thumbnail: fields.thumbnail,
             promoVideoUrl: fields.promoVideoUrl,
             price: fields.price,
+            salePrice: fields.salePrice,
             isFree: fields.isFree,
             currency: fields.currency,
             level: fields.level,
@@ -1025,6 +1028,12 @@ export class AdminService {
       dto.isFree ?? current?.isFree ?? requestedPrice === 0,
     );
     const price = isFree ? 0 : requestedPrice;
+    const salePrice = normaliseSalePrice(
+      Object.prototype.hasOwnProperty.call(dto, 'salePrice')
+        ? dto.salePrice
+        : current?.salePrice,
+      price,
+    );
 
     const requestedSlug = String(dto.slug ?? current?.slug ?? title);
     const slug = await this.uniqueSlug(requestedSlug, existingId);
@@ -1048,6 +1057,7 @@ export class AdminService {
           : current?.promoVideoUrl,
       ),
       price,
+      salePrice,
       isFree,
       currency: String(
         dto.currency ?? current?.currency ?? 'INR',

@@ -449,6 +449,7 @@ export class CoursesService implements OnModuleInit {
       thumbnail: course.thumbnail,
       promoVideoUrl: course.promoVideoUrl ?? null,
       price: course.price,
+      salePrice: course.salePrice ?? null,
       isFree: Boolean(course.isFree ?? Number(course.price || 0) === 0),
       currency: course.currency,
       level: course.level,

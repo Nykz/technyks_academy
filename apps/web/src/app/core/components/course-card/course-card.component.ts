@@ -1,7 +1,7 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { Course } from '../../services/courses.service';
+import { Course, activeSalePrice, salePercentOff } from '../../services/courses.service';
 
 import { LocalPricePipe } from '../../pipes/local-price.pipe';
 
@@ -19,9 +19,29 @@ import { LocalPricePipe } from '../../pipes/local-price.pipe';
             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
           <div class="absolute inset-0 bg-gradient-to-t from-[#121A2B] via-transparent to-transparent opacity-80"></div>
-          <span class="absolute top-3 left-3 font-['JetBrains_Mono'] text-[10px] text-[#040810] bg-[#3B82F6] px-2.5 py-1 rounded font-bold uppercase">
-            {{ course.isFree ? 'Free' : 'Premium' }}
-          </span>
+          @if (course.isFree) {
+            <span class="absolute top-3 left-3 font-['JetBrains_Mono'] text-[10px] !text-white !bg-emerald-600 px-2.5 py-1 rounded font-bold uppercase shadow-md">
+              Free
+            </span>
+          } @else {
+            <span
+              class="absolute top-3 left-3 w-9 h-9 rounded-full flex items-center justify-center !bg-[#0f172a]/85 backdrop-blur-md border border-amber-300/60 shadow-lg"
+              title="Premium course"
+              aria-label="Premium course"
+              role="img"
+            >
+              <svg viewBox="0 0 24 24" class="w-5 h-5" aria-hidden="true">
+                <path
+                  fill="#FBBF24"
+                  d="M3 8.5l4.2 3.3L12 5l4.8 6.8L21 8.5l-1.7 9.2H4.7L3 8.5z"
+                />
+                <rect x="4.7" y="18.6" width="14.6" height="2" rx="0.6" fill="#F59E0B" />
+                <circle cx="3" cy="7.6" r="1.4" fill="#FDE68A" />
+                <circle cx="12" cy="4.2" r="1.4" fill="#FDE68A" />
+                <circle cx="21" cy="7.6" r="1.4" fill="#FDE68A" />
+              </svg>
+            </span>
+          }
           <span class="absolute top-3 right-3 font-['JetBrains_Mono'] text-[10px] !text-white !bg-[#0f172a]/95 backdrop-blur-md border border-white/20 px-2.5 py-1 rounded font-semibold uppercase shadow-sm">
             {{ course.level }}
           </span>
@@ -58,9 +78,17 @@ import { LocalPricePipe } from '../../pipes/local-price.pipe';
       </a>
 
       <div class="px-5 py-4 flex items-center justify-between border-t border-[#1E293B]/40 bg-[#0b0f10]/40">
-        <div class="font-['JetBrains_Mono'] text-lg font-bold text-[#3B82F6]">
-          {{ course.isFree ? 'FREE' : (course.price | localPrice) }}
-        </div>
+        @if (course.isFree) {
+          <div class="font-['JetBrains_Mono'] text-lg font-bold text-[#3B82F6]">FREE</div>
+        } @else if (salePrice() !== null) {
+          <div class="flex items-baseline flex-wrap gap-x-2 gap-y-0.5 font-['JetBrains_Mono']">
+            <span class="text-lg font-bold text-[#3B82F6]">{{ salePrice() | localPrice }}</span>
+            <span class="text-xs text-[#a18d7b] line-through" aria-label="Original price">{{ course.price | localPrice }}</span>
+            <span class="text-[10px] font-bold !text-white !bg-rose-600 rounded px-1.5 py-0.5">{{ percentOff() }}% OFF</span>
+          </div>
+        } @else {
+          <div class="font-['JetBrains_Mono'] text-lg font-bold text-[#3B82F6]">{{ course.price | localPrice }}</div>
+        }
         <a
           [routerLink]="['/courses', course.slug]"
           class="font-['JetBrains_Mono'] text-xs font-bold text-[#3B82F6] hover:text-[#3B82F6] flex items-center gap-1 group-hover:gap-2 transition-all"
@@ -74,6 +102,14 @@ import { LocalPricePipe } from '../../pipes/local-price.pipe';
 })
 export class CourseCardComponent {
   @Input({ required: true }) course!: Course;
+
+  salePrice(): number | null {
+    return activeSalePrice(this.course);
+  }
+
+  percentOff(): number {
+    return salePercentOff(this.course);
+  }
 
   totalLessons(): number {
     return this.course.modules?.reduce((total, module) => total + (module.lessons?.length || 0), 0) || 0;

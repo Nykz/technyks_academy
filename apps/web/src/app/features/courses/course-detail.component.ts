@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { Title, Meta } from '@angular/platform-browser';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { CoursesService, Course } from '../../core/services/courses.service';
+import { CoursesService, Course, activeSalePrice, salePercentOff } from '../../core/services/courses.service';
 import { AuthService } from '../../core/services/auth.service';
 import { EnrollmentsService } from '../../core/services/enrollments.service';
 import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
@@ -48,6 +48,12 @@ import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
                 <span
                   class="font-['JetBrains_Mono'] text-xs text-white dark:text-[#040810] bg-[#2563EB] dark:bg-[#3B82F6] px-3 py-1 rounded font-bold uppercase shadow-sm"
                 >
+                  @if (!course()?.isFree) {
+                    <svg viewBox="0 0 24 24" class="inline-block w-3.5 h-3.5 -mt-0.5 mr-1" aria-hidden="true">
+                      <path fill="#FCD34D" d="M3 8.5l4.2 3.3L12 5l4.8 6.8L21 8.5l-1.7 9.2H4.7L3 8.5z" />
+                      <rect x="4.7" y="18.6" width="14.6" height="2" rx="0.6" fill="#FCD34D" />
+                    </svg>
+                  }
                   {{ course()?.isFree ? 'Free course' : 'Premium course' }}
                 </span>
                 <span
@@ -224,10 +230,22 @@ import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
                       >LOGGED-IN STUDENTS ONLY</span
                     >
                   } @else {
-                    <span
-                      class="font-['JetBrains_Mono'] text-3xl font-bold text-slate-900 dark:text-white"
-                      >{{ course()?.price | localPrice }}</span
-                    >
+                    @if (salePrice() !== null) {
+                      <span class="flex items-baseline flex-wrap gap-x-2">
+                        <span class="font-['JetBrains_Mono'] text-3xl font-bold text-slate-900 dark:text-white">{{
+                          salePrice() | localPrice
+                        }}</span>
+                        <span class="font-['JetBrains_Mono'] text-sm text-slate-500 dark:text-[#a18d7b] line-through" aria-label="Original price">{{
+                          course()?.price | localPrice
+                        }}</span>
+                        <span class="font-['JetBrains_Mono'] text-[11px] font-bold !text-white !bg-rose-600 rounded px-1.5 py-0.5">{{ percentOff() }}% OFF</span>
+                      </span>
+                    } @else {
+                      <span
+                        class="font-['JetBrains_Mono'] text-3xl font-bold text-slate-900 dark:text-white"
+                        >{{ course()?.price | localPrice }}</span
+                      >
+                    }
                     <span
                       class="font-['JetBrains_Mono'] text-xs text-[#2563EB] dark:text-[#3B82F6] font-semibold"
                       >ONE-TIME OR MEMBERSHIP</span
@@ -702,6 +720,8 @@ import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
   `,
 })
 export class CourseDetailComponent implements OnInit {
+  readonly salePrice = () => activeSalePrice(this.course());
+  readonly percentOff = () => salePercentOff(this.course());
   private route = inject(ActivatedRoute);
   router = inject(Router);
   private coursesService = inject(CoursesService);

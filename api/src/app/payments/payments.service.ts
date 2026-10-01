@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { TemplatesService } from '../templates/templates.service';
+import { coursePayablePrice } from '../courses/course-price';
 
 const INITIAL_PLANS = [
   {
@@ -125,7 +126,7 @@ export class PaymentsService implements OnModuleInit {
       : this.prisma.inMemoryEnrollments.find(e => e.userId === dto.userId && e.courseId === course.id);
     if (owned) return { provider: 'FREE', completed: true, alreadyEnrolled: true, amount: 0, currency: course.currency, title: course.title };
 
-    const originalAmount = course.isFree ? 0 : Number(course.price);
+    const originalAmount = course.isFree ? 0 : coursePayablePrice(course);
     if (!Number.isFinite(originalAmount) || originalAmount < 0) throw new BadRequestException('Invalid course price.');
     const couponCode = dto.couponCode?.trim().toUpperCase() || null;
     const validate = async (client?: any) => couponCode

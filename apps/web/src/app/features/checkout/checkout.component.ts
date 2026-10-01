@@ -9,7 +9,7 @@ import {
 } from '../../core/services/payments.service';
 import { AuthService } from '../../core/services/auth.service';
 import { EnrollmentsService } from '../../core/services/enrollments.service';
-import { CoursesService } from '../../core/services/courses.service';
+import { CoursesService, payablePrice } from '../../core/services/courses.service';
 import { TemplateCartService } from '../../core/services/template-cart.service';
 import { TemplatesService } from '../../core/services/templates.service';
 
@@ -268,7 +268,7 @@ export class CheckoutComponent implements OnInit {
           next: (course) => {
             this.courseId.set(course.id);
             this.itemTitle.set(course.title);
-            this.originalAmount.set(course.isFree ? 0 : Number(course.price));
+            this.originalAmount.set(payablePrice(course));
             if (!this.authService.isAuthenticated()) {
               this.isLoadingSummary.set(false);
               return;

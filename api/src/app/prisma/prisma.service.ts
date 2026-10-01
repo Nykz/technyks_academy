@@ -132,6 +132,7 @@ export class PrismaService
         sql: "ADD COLUMN `category` VARCHAR(191) NOT NULL DEFAULT 'Web Development'",
       },
       { table: 'Payment', sql: 'ADD COLUMN `templateProductIds` JSON NULL' },
+      { table: 'Course', sql: 'ADD COLUMN `salePrice` DOUBLE NULL' },
     ];
 
     for (const addition of additions) {

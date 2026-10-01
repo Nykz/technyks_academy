@@ -188,7 +188,7 @@ type AdminTab =
                       </span>
                       <span class="text-[#a18d7b]">{{ course.isPublished ? 'Public' : 'Private' }}</span>
                       <span class="text-[#1E293B]">|</span>
-                      <span class="text-[#3B82F6]">{{ course.isFree ? 'FREE' : '₹' + course.price.toLocaleString('en-IN') }}</span>
+                      <span class="text-[#3B82F6]">{{ course.isFree ? 'FREE' : '₹' + course.price.toLocaleString('en-IN') }}</span>@if (!course.isFree && course.salePrice != null && course.salePrice < course.price) {<span class="text-emerald-400 ml-1">sale ₹{{ course.salePrice.toLocaleString('en-IN') }}</span>}
                     </div>
                   </div>
                 </div>
