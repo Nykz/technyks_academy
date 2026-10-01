@@ -4,11 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CertificatesService } from '../certificates/certificates.service';
 
 @Injectable()
 export class EnrollmentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private certificates?: CertificatesService,
+  ) {}
 
   async getMyEnrollments(userId: string) {
     if (this.prisma.isDbConnected) {
@@ -262,55 +267,21 @@ export class EnrollmentsService {
       Object.assign(enrollment, updateData, { course });
     }
 
-    if (progressPercent === 100)
-      await this.generateCertificateIfEligible(userId, course.id);
+    if (progressPercent === 100 && this.certificates) {
+      // A certificate problem must not lose the student's progress.
+      try {
+        await this.certificates.issueIfComplete(userId, course.id);
+      } catch {
+        // They can still get it from the dashboard.
+      }
+    }
     return updated;
   }
 
+  /** The student's certificate; issued only once every lesson is done. */
   async generateCertificateIfEligible(userId: string, courseId: string) {
-    if (this.prisma.isDbConnected) {
-      try {
-        const existing = await this.prisma.certificate.findUnique({
-          where: { userId_courseId: { userId, courseId } },
-        });
-        if (existing) return existing;
-
-        const certificateNumber = this.createCertificateNumber();
-        return await this.prisma.certificate.create({
-          data: {
-            userId,
-            courseId,
-            certificateNumber,
-            pdfUrl: `/api/certificates/download/${certificateNumber}.pdf`,
-          },
-        });
-      } catch {
-        throw new ServiceUnavailableException(
-          'Your data could not be loaded or saved. Please retry shortly.',
-        );
-      }
-    }
-
-    const existingMem = this.prisma.inMemoryCertificates.find(
-      (certificate) =>
-        certificate.userId === userId && certificate.courseId === courseId,
-    );
-    if (existingMem) return existingMem;
-
-    const certificateNumber = this.createCertificateNumber();
-    const certificate = {
-      id: `cert_${Date.now().toString(36)}`,
-      userId,
-      courseId,
-      certificateNumber,
-      pdfUrl: `/api/certificates/download/${certificateNumber}.pdf`,
-      issuedAt: new Date(),
-    };
-    this.prisma.inMemoryCertificates.push(certificate);
-    return certificate;
-  }
-
-  private createCertificateNumber() {
-    return `CERT-TA-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    if (!this.certificates)
+      throw new ServiceUnavailableException('Certificates are not available.');
+    return this.certificates.issueIfComplete(userId, courseId);
   }
 }

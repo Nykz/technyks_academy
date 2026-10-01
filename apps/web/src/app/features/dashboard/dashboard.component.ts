@@ -2,6 +2,7 @@ import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import {
+  Certificate,
   EnrollmentsService,
   Enrollment,
 } from '../../core/services/enrollments.service';
@@ -219,19 +220,61 @@ import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 
                 @if (getProgressPercent(enrollment) === 100) {
                   <button
-                    (click)="downloadCertificate(enrollment.course.id)"
-                    class="font-['JetBrains_Mono'] text-xs font-bold text-[#3B82F6] hover:underline flex items-center gap-1"
+                    (click)="openCertificate(enrollment.course.id)"
+                    [disabled]="certificateLoadingId() === enrollment.course.id"
+                    class="font-['JetBrains_Mono'] text-xs font-bold text-[#3B82F6] hover:underline flex items-center gap-1 disabled:opacity-60"
                   >
                     <span class="material-symbols-outlined text-sm"
                       >workspace_premium</span
                     >
-                    Certificate
+                    {{ certificateLoadingId() === enrollment.course.id ? 'Preparing…' : 'Certificate' }}
                   </button>
                 }
               </div>
             </div>
           }
         </div>
+      }
+
+      @if (certificateError()) {
+        <p class="mt-6 rounded border border-[#ffb4ab]/40 bg-[#ffb4ab]/10 px-4 py-3 text-sm text-[#ffb4ab]" role="alert">
+          {{ certificateError() }}
+        </p>
+      }
+
+      @if (certificates().length > 0) {
+        <section id="certificates" class="mt-12 border-t border-slate-200 pt-10 dark:border-white/10">
+          <div class="mb-6">
+            <p class="font-['JetBrains_Mono'] text-[10px] font-bold uppercase tracking-[.2em] text-blue-600">Achievements</p>
+            <h2 class="mt-2 text-3xl font-bold text-slate-950 dark:text-white">My certificates</h2>
+            <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              Download your certificates, share the verification link, or add them to LinkedIn.
+            </p>
+          </div>
+          <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+            @for (certificate of certificates(); track certificate.certificateNumber) {
+              <article class="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#121A2B] sm:flex-row sm:items-center">
+                <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full !bg-amber-100 dark:!bg-amber-400/15">
+                  <span class="material-symbols-outlined text-3xl !text-amber-600 dark:!text-amber-300">workspace_premium</span>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <h3 class="font-['Hanken_Grotesk'] text-base font-bold leading-snug text-slate-950 dark:text-white">{{ certificate.courseTitle }}</h3>
+                  <p class="mt-1 font-['JetBrains_Mono'] text-[11px] text-slate-500 dark:text-slate-400">
+                    Completed {{ certificate.issuedAt | date: 'd MMM y' }} · ID {{ certificate.certificateNumber }}
+                  </p>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <a [href]="certificate.downloadUrl" class="inline-flex items-center gap-1 rounded !bg-[#2563EB] px-3 py-2 font-['JetBrains_Mono'] text-[11px] font-bold !text-white hover:!bg-[#1D4ED8]">
+                      <span class="material-symbols-outlined text-sm">download</span> Download PDF
+                    </a>
+                    <a [routerLink]="['/certificate', certificate.certificateNumber]" class="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-2 font-['JetBrains_Mono'] text-[11px] font-bold text-slate-700 hover:border-blue-500 dark:border-white/20 dark:text-slate-200">
+                      <span class="material-symbols-outlined text-sm">verified</span> View &amp; share
+                    </a>
+                  </div>
+                </div>
+              </article>
+            }
+          </div>
+        </section>
       }
 
       @if (templatePurchases().length > 0) {
@@ -336,6 +379,9 @@ export class DashboardComponent implements OnInit {
   isLoading = signal(true);
   templatePurchases = signal<TemplatePurchase[]>([]);
   downloadingId = signal<string | null>(null);
+  certificates = signal<Certificate[]>([]);
+  certificateLoadingId = signal<string | null>(null);
+  certificateError = signal('');
   downloadError = signal('');
 
   ngOnInit() {
@@ -346,6 +392,7 @@ export class DashboardComponent implements OnInit {
       },
       error: () => this.isLoading.set(false),
     });
+    this.loadCertificates();
     this.templatesService
       .purchases()
       .subscribe({ next: (items) => this.templatePurchases.set(items) });
@@ -432,11 +479,31 @@ export class DashboardComponent implements OnInit {
     ).length;
   }
 
-  downloadCertificate(courseId: string) {
+  private loadCertificates() {
+    this.enrollmentsService.getMyCertificates().subscribe({
+      next: (items) => this.certificates.set(items || []),
+      error: () => this.certificates.set([]),
+    });
+  }
+
+  /** Issues the certificate if needed, then opens the PDF in a new tab. */
+  openCertificate(courseId: string) {
+    // Open the tab now (inside the click) so pop-up blockers allow it.
+    const tab = window.open('', '_blank');
+    this.certificateLoadingId.set(courseId);
+    this.certificateError.set('');
     this.enrollmentsService.getCertificate(courseId).subscribe({
-      next: (cert) => {
-        alert(
-          `Certificate issued!\nCertificate #: ${cert.certificateNumber}\nURL: ${cert.pdfUrl}`,
+      next: (certificate) => {
+        this.certificateLoadingId.set(null);
+        if (tab) tab.location.href = certificate.pdfUrl;
+        else window.location.assign(certificate.downloadUrl);
+        this.loadCertificates();
+      },
+      error: (error) => {
+        tab?.close();
+        this.certificateLoadingId.set(null);
+        this.certificateError.set(
+          error?.error?.message || 'Your certificate could not be prepared. Please try again.',
         );
       },
     });

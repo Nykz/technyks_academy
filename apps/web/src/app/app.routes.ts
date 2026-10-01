@@ -140,6 +140,13 @@ export const appRoutes: Routes = [
       ),
   },
   {
+    path: 'certificate/:number',
+    loadComponent: () =>
+      import('./features/certificates/certificate-verify.component').then(
+        (m) => m.CertificateVerifyComponent,
+      ),
+  },
+  {
     path: 'privacy-policy',
     loadComponent: () =>
       import('./features/legal/privacy-policy.component').then(

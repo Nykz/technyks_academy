@@ -18,6 +18,7 @@ import { CommunicationModule } from './communication/communication.module';
 import { TemplatesModule } from './templates/templates.module';
 import { MailModule } from './mail/mail.service';
 import { FxModule } from './fx/fx.module';
+import { CertificatesModule } from './certificates/certificates.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { FxModule } from './fx/fx.module';
     CommunicationModule,
     TemplatesModule,
     FxModule,
+    CertificatesModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: AccountAwareThrottlerGuard }],

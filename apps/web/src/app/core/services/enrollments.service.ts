@@ -3,6 +3,23 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Course } from './courses.service';
 
+export interface Certificate {
+  certificateNumber: string;
+  studentName: string;
+  courseTitle: string;
+  courseSlug: string;
+  issuedAt: string;
+  lessonCount: number;
+  durationSeconds: number;
+  courseLength: string;
+  /** Opens the PDF in the browser. */
+  pdfUrl: string;
+  /** Downloads the PDF. */
+  downloadUrl: string;
+  /** Public page anyone can use to check the certificate. */
+  verifyUrl: string;
+}
+
 export interface Enrollment {
   id: string;
   userId: string;
@@ -60,11 +77,18 @@ export class EnrollmentsService {
     return this.http.get<PlaybackTokenResponse>(`/api/video/token/${lessonId}`);
   }
 
-  getCertificate(
-    courseId: string,
-  ): Observable<{ certificateNumber: string; pdfUrl: string }> {
-    return this.http.get<{ certificateNumber: string; pdfUrl: string }>(
-      `/api/enrollments/certificate/${courseId}`,
+  /** Issues (or returns) the certificate for a finished course. */
+  getCertificate(courseId: string): Observable<Certificate> {
+    return this.http.get<Certificate>(`/api/enrollments/certificate/${courseId}`);
+  }
+
+  getMyCertificates(): Observable<Certificate[]> {
+    return this.http.get<Certificate[]>('/api/certificates/my');
+  }
+
+  verifyCertificate(certificateNumber: string): Observable<Certificate> {
+    return this.http.get<Certificate>(
+      `/api/certificates/verify/${encodeURIComponent(certificateNumber)}`,
     );
   }
 }

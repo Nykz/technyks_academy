@@ -45,6 +45,7 @@ export interface OutgoingEmail {
   html?: string;
   /** Overrides MAIL_REPLY_TO, e.g. the visitor's address on contact messages. */
   replyTo?: string;
+  attachments?: { filename: string; content: Buffer; contentType?: string }[];
 }
 
 /**
@@ -167,6 +168,7 @@ export class MailService {
         text: email.text,
         ...(email.html ? { html: email.html } : {}),
         ...(replyTo ? { replyTo } : {}),
+        ...(email.attachments?.length ? { attachments: email.attachments } : {}),
       });
       return { ok: true };
     } catch (error: any) {
@@ -194,6 +196,14 @@ export class MailService {
           text: email.text,
           ...(email.html ? { html: email.html } : {}),
           ...(replyTo ? { reply_to: replyTo } : {}),
+          ...(email.attachments?.length
+            ? {
+                attachments: email.attachments.map((file) => ({
+                  filename: file.filename,
+                  content: file.content.toString('base64'),
+                })),
+              }
+            : {}),
         }),
       });
       if (response.ok) return { ok: true };
