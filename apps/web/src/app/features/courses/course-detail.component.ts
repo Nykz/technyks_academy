@@ -6,7 +6,7 @@ import { Title, Meta } from '@angular/platform-browser';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { CoursesService, Course, activeSalePrice, salePercentOff } from '../../core/services/courses.service';
 import { AuthService } from '../../core/services/auth.service';
-import { EnrollmentsService } from '../../core/services/enrollments.service';
+import { Certificate, EnrollmentsService } from '../../core/services/enrollments.service';
 import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 
 import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
@@ -305,6 +305,37 @@ import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
                       >arrow_forward</span
                     >
                   </a>
+                }
+
+                @if (authService.isAdmin()) {
+                  <div class="mt-4 rounded-lg border border-dashed border-amber-400 !bg-amber-50 p-4 dark:!bg-amber-400/10">
+                    <p class="font-['JetBrains_Mono'] text-[10px] font-bold uppercase tracking-widest !text-amber-700 dark:!text-amber-300">
+                      Admin only · testing
+                    </p>
+                    <p class="mt-1 text-xs text-slate-700 dark:text-slate-300">
+                      Marks every lesson complete for your admin account, then issues the certificate and emails it to you.
+                    </p>
+                    <button
+                      type="button"
+                      (click)="adminTestComplete()"
+                      [disabled]="adminTestBusy()"
+                      class="mt-3 w-full rounded !bg-amber-500 px-4 py-2.5 font-['JetBrains_Mono'] text-xs font-bold uppercase !text-white hover:!bg-amber-600 disabled:opacity-60"
+                    >
+                      {{ adminTestBusy() ? 'Completing…' : 'Complete course & send certificate' }}
+                    </button>
+                    @if (adminTestMessage()) {
+                      <p class="mt-2 text-xs" [class.!text-emerald-700]="!adminTestFailed()" [class.dark:!text-emerald-300]="!adminTestFailed()" [class.!text-rose-600]="adminTestFailed()" role="status">
+                        {{ adminTestMessage() }}
+                      </p>
+                      @if (adminTestCertificate(); as cert) {
+                        <div class="mt-2 flex flex-wrap gap-2">
+                          <a [href]="cert.pdfUrl" target="_blank" rel="noopener" class="text-xs font-bold text-blue-600 underline">Open PDF</a>
+                          <a [routerLink]="['/certificate', cert.certificateNumber]" class="text-xs font-bold text-blue-600 underline">Verification page</a>
+                          <a routerLink="/dashboard" fragment="certificates" class="text-xs font-bold text-blue-600 underline">My dashboard</a>
+                        </div>
+                      }
+                    }
+                  </div>
                 }
 
                 @if (!isEnrolled()) {
@@ -721,6 +752,37 @@ import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
 })
 export class CourseDetailComponent implements OnInit {
   readonly salePrice = () => activeSalePrice(this.course());
+  readonly adminTestBusy = signal(false);
+  readonly adminTestMessage = signal('');
+  readonly adminTestFailed = signal(false);
+  readonly adminTestCertificate = signal<Certificate | null>(null);
+
+  adminTestComplete() {
+    const course = this.course();
+    if (!course) return;
+    this.adminTestBusy.set(true);
+    this.adminTestMessage.set('');
+    this.adminTestCertificate.set(null);
+    this.enrollmentsService.adminTestComplete(course.id).subscribe({
+      next: ({ certificate, resent, email }) => {
+        this.adminTestBusy.set(false);
+        this.adminTestCertificate.set(certificate);
+        this.isEnrolled.set(true);
+        this.adminTestFailed.set(!email.sent);
+        const issued = resent ? 'Course completed. You already had this certificate' : 'Course completed and certificate issued';
+        this.adminTestMessage.set(
+          email.sent
+            ? `${issued}. Email sent to ${email.to}.`
+            : `${issued}, but the email was not sent: ${email.reason || 'unknown reason'}`,
+        );
+      },
+      error: (error) => {
+        this.adminTestBusy.set(false);
+        this.adminTestFailed.set(true);
+        this.adminTestMessage.set(error?.error?.message || 'Could not complete the course. Please try again.');
+      },
+    });
+  }
   readonly percentOff = () => salePercentOff(this.course());
   private route = inject(ActivatedRoute);
   router = inject(Router);

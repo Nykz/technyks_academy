@@ -70,7 +70,7 @@ export class CertificatesService {
   }
 
   /** Returns the student's certificate, issuing it if the course is finished. */
-  async issueIfComplete(userId: string, courseId: string) {
+  async issueIfComplete(userId: string, courseId: string, options: { sendEmail?: boolean } = {}) {
     const existing = await this.findForUser(userId, courseId);
     if (existing) return this.withUrls(existing);
 
@@ -115,9 +115,11 @@ export class CertificatesService {
     }
 
     // Email in the background so finishing the last lesson stays fast.
-    void this.emailCertificate(certificateNumber).catch((error) =>
-      this.logger.warn(`Certificate email failed for ${certificateNumber}: ${error?.message || error}`),
-    );
+    if (options.sendEmail !== false) {
+      void this.emailCertificate(certificateNumber).catch((error) =>
+        this.logger.warn(`Certificate email failed for ${certificateNumber}: ${error?.message || error}`),
+      );
+    }
     return this.withUrls(certificate);
   }
 
@@ -152,11 +154,76 @@ export class CertificatesService {
     return { buffer, filename: `Technyks-Certificate-${slug}-${details.certificateNumber}.pdf` };
   }
 
-  private async emailCertificate(certificateNumber: string) {
-    if (!this.mail.isConfigured()) return;
+  /**
+   * Admin testing: marks every lesson of the course complete for the admin's
+   * own account, issues the certificate and emails it (again, if it already
+   * exists), so the whole student experience can be checked end to end.
+   */
+  async adminTestComplete(userId: string, courseId: string) {
+    const course: any = this.prisma.isDbConnected
+      ? await this.prisma.course.findUnique({
+          where: { id: courseId },
+          select: {
+            id: true,
+            modules: {
+              orderBy: { order: 'asc' },
+              select: { lessons: { orderBy: { order: 'asc' }, select: { id: true } } },
+            },
+          },
+        })
+      : this.prisma.inMemoryCourses.find((item) => item.id === courseId);
+    if (!course) throw new NotFoundException('Course not found.');
+    const lessonIds: string[] = (course.modules || []).flatMap((module: any) =>
+      (module.lessons || []).map((lesson: any) => lesson.id),
+    );
+    if (!lessonIds.length) {
+      throw new ForbiddenException('This course has no lessons yet, so it cannot be completed.');
+    }
+
+    const progress = {
+      completedLessonIds: lessonIds,
+      progressPercent: 100,
+      lastWatchedLessonId: lessonIds[lessonIds.length - 1],
+    };
+    if (this.prisma.isDbConnected) {
+      await this.prisma.enrollment.upsert({
+        where: { userId_courseId: { userId, courseId } },
+        create: { userId, courseId, ...progress },
+        update: progress,
+      });
+    } else {
+      const existing = this.prisma.inMemoryEnrollments.find(
+        (item) => item.userId === userId && item.courseId === courseId,
+      );
+      if (existing) Object.assign(existing, progress, { updatedAt: new Date() });
+      else
+        this.prisma.inMemoryEnrollments.push({
+          id: `enr_${Date.now().toString(36)}`,
+          userId,
+          courseId,
+          ...progress,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+    }
+
+    const hadCertificate = Boolean(await this.findForUser(userId, courseId));
+    const certificate = hadCertificate
+      ? this.withUrls(await this.findForUser(userId, courseId))
+      : await this.issueIfComplete(userId, courseId, { sendEmail: false });
+    const email = await this.emailCertificate(certificate.certificateNumber);
+    return { certificate, resent: hadCertificate, email };
+  }
+
+  private async emailCertificate(
+    certificateNumber: string,
+  ): Promise<{ sent: boolean; to: string | null; reason?: string }> {
+    if (!this.mail.isConfigured()) {
+      return { sent: false, to: null, reason: 'Email is not configured on the server (SMTP settings).' };
+    }
     const record = await this.loadByNumber(certificateNumber);
     const email = record.user?.email;
-    if (!email) return;
+    if (!email) return { sent: false, to: null, reason: 'This account has no email address.' };
     const details = this.toPublic(record);
     const { buffer, filename } = await this.pdf(certificateNumber);
     const firstName = String(details.studentName).split(' ')[0] || 'there';
@@ -194,6 +261,9 @@ export class CertificatesService {
       attachments: [{ filename, content: buffer, contentType: 'application/pdf' }],
     });
     if (!ok) this.logger.warn(`Certificate email for ${certificateNumber} was not accepted by the mail provider.`);
+    return ok
+      ? { sent: true, to: email }
+      : { sent: false, to: email, reason: 'The mail server did not accept the email. Check the API logs.' };
   }
 
   private async findForUser(userId: string, courseId: string) {

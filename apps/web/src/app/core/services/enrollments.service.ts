@@ -82,6 +82,18 @@ export class EnrollmentsService {
     return this.http.get<Certificate>(`/api/enrollments/certificate/${courseId}`);
   }
 
+  /** Admin only: completes the course for the admin and emails the certificate. */
+  adminTestComplete(courseId: string): Observable<{
+    certificate: Certificate;
+    resent: boolean;
+    email: { sent: boolean; to: string | null; reason?: string };
+  }> {
+    return this.http.post<any>(
+      `/api/admin/certificates/test-complete/${encodeURIComponent(courseId)}`,
+      {},
+    );
+  }
+
   getMyCertificates(): Observable<Certificate[]> {
     return this.http.get<Certificate[]>('/api/certificates/my');
   }

@@ -92,6 +92,43 @@ describe('CertificatesService', () => {
     expect(JSON.stringify(details)).not.toContain('asha@example.com');
   });
 
+  it('admin test: completes every lesson, issues and emails the certificate', async () => {
+    const { service, prisma, mail } = setup({ progressPercent: 100 });
+    prisma.course = {
+      findUnique: vi.fn().mockResolvedValue({ id: 'c1', modules: [{ lessons: [{ id: 'l1' }, { id: 'l2' }] }] }),
+    };
+    prisma.enrollment.upsert = vi.fn().mockResolvedValue({});
+
+    const result = await service.adminTestComplete('admin1', 'c1');
+
+    expect(prisma.enrollment.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: { completedLessonIds: ['l1', 'l2'], progressPercent: 100, lastWatchedLessonId: 'l2' },
+      }),
+    );
+    expect(result.resent).toBe(false);
+    expect(result.email).toEqual({ sent: true, to: 'asha@example.com' });
+    expect(mail.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('admin test: resends the email when the certificate already exists', async () => {
+    const { service, prisma, mail } = setup({ progressPercent: 100 });
+    prisma.course = { findUnique: vi.fn().mockResolvedValue({ id: 'c1', modules: [{ lessons: [{ id: 'l1' }] }] }) };
+    prisma.enrollment.upsert = vi.fn().mockResolvedValue({});
+    prisma.certificate.findUnique.mockImplementation(async ({ where }: any) =>
+      where.certificateNumber
+        ? { certificateNumber: where.certificateNumber, issuedAt: new Date(), user: { name: 'Admin', email: 'admin@example.com' }, course: { title: 'T', slug: 't', modules: [] } }
+        : { certificateNumber: 'TA-AAAA-BBBB-CCCC' },
+    );
+
+    const result = await service.adminTestComplete('admin1', 'c1');
+
+    expect(prisma.certificate.create).not.toHaveBeenCalled();
+    expect(result.resent).toBe(true);
+    expect(result.email.to).toBe('admin@example.com');
+    expect(mail.send).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects malformed IDs', async () => {
     const { service } = setup({ progressPercent: 100 });
     await expect(service.verify('../../etc')).rejects.toBeInstanceOf(NotFoundException);

@@ -1,7 +1,7 @@
-import { Controller, Get, Module, Param, Query, Request, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Module, Param, Post, Query, Request, Res, SetMetadata, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import { JwtAuthGuard } from '../auth/guards';
+import { JwtAuthGuard, RolesGuard } from '../auth/guards';
 import { CertificatesService } from './certificates.service';
 
 @Controller('certificates')
@@ -40,8 +40,23 @@ export class CertificatesController {
   }
 }
 
+/** Admin-only testing helpers. */
+@Controller('admin/certificates')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@SetMetadata('roles', ['ADMIN'])
+export class AdminCertificatesController {
+  constructor(private readonly certificates: CertificatesService) {}
+
+  /** Completes the course for the signed-in admin and emails the certificate. */
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('test-complete/:courseId')
+  testComplete(@Request() req: any, @Param('courseId') courseId: string) {
+    return this.certificates.adminTestComplete(req.user.id, courseId);
+  }
+}
+
 @Module({
-  controllers: [CertificatesController],
+  controllers: [CertificatesController, AdminCertificatesController],
   providers: [CertificatesService],
   exports: [CertificatesService],
 })
