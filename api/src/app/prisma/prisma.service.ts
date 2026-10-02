@@ -133,6 +133,7 @@ export class PrismaService
       },
       { table: 'Payment', sql: 'ADD COLUMN `templateProductIds` JSON NULL' },
       { table: 'Course', sql: 'ADD COLUMN `salePrice` DOUBLE NULL' },
+      { table: 'Payment', sql: 'ADD COLUMN `amountInr` DOUBLE NULL' },
       { table: 'User', sql: 'ADD COLUMN `headline` VARCHAR(120) NULL' },
       { table: 'User', sql: 'ADD COLUMN `bio` TEXT NULL' },
       { table: 'User', sql: 'ADD COLUMN `websiteUrl` VARCHAR(191) NULL' },

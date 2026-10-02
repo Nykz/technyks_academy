@@ -55,7 +55,7 @@ export class PaymentsService {
     return this.http.post<CouponValidationResult>('/api/payments/coupon/validate', { code, originalAmount, ...context });
   }
 
-  createOrder(payload: { courseId?: string; planId?: string; templateProductIds?: string[]; couponCode?: string; provider?: string }): Observable<OrderResponse> {
+  createOrder(payload: { courseId?: string; planId?: string; templateProductIds?: string[]; couponCode?: string; provider?: string; currency?: string }): Observable<OrderResponse> {
     return this.http.post<OrderResponse>('/api/payments/create-order', payload);
   }
 

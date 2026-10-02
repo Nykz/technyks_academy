@@ -42,6 +42,7 @@ import { RouterModule } from '@angular/router';
             <li><strong>Payment & Transaction Information:</strong> Transactions are securely processed through RBI/PCI-DSS compliant payment gateways (Razorpay). We do not store raw credit card numbers or UPI PINs on our servers.</li>
             <li><strong>Communications:</strong> Any messages, feedback, support inquiries, or reviews submitted through our contact form.</li>
             <li><strong>Technical & Analytical Logs:</strong> IP address, browser type, operating system, pages viewed, and referral URLs.</li>
+            <li><strong>Country for Pricing:</strong> To show prices and charge you in your local currency, we look up the country of your IP address. Only the IP address is sent to a country lookup service (country.is); the result is kept for up to 12 hours and is not linked to your account.</li>
           </ul>
         </section>
 

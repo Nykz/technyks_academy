@@ -249,6 +249,8 @@ model Payment {
   planId             String?
   courseId           String?
   templateProductIds Json?
+  /// The same amount in rupees, for revenue reports when charged abroad.
+  amountInr          Float?
   couponCode         String?
   course             Course?         @relation(fields: [courseId], references: [id], onDelete: SetNull)
   createdAt          DateTime        @default(now())

@@ -101,7 +101,7 @@ export class AdminService {
     }
 
     const totalRevenue = payments.reduce(
-      (sum, payment) => sum + Number(payment.amount || 0),
+      (sum, payment) => sum + paymentInr(payment),
       0,
     );
     const courseSalesMap: Record<
@@ -112,7 +112,7 @@ export class AdminService {
       const title = payment.course?.title || 'Membership Subscription';
       courseSalesMap[title] ??= { title, count: 0, totalAmount: 0 };
       courseSalesMap[title].count += 1;
-      courseSalesMap[title].totalAmount += Number(payment.amount || 0);
+      courseSalesMap[title].totalAmount += paymentInr(payment);
     }
 
     const subscriptionCount = activeSubscriptions + canceledSubscriptions;
@@ -1096,7 +1096,7 @@ export class AdminService {
               status: 'SUCCESS',
               createdAt: { gte: monthStart },
             },
-            select: { courseId: true, amount: true, createdAt: true },
+            select: { courseId: true, amount: true, amountInr: true, currency: true, status: true, createdAt: true },
           }),
           this.prisma.enrollment.findMany({
             where: {
@@ -1124,8 +1124,7 @@ export class AdminService {
       ) {
         revenueByCourse.set(
           payment.courseId,
-          (revenueByCourse.get(payment.courseId) || 0) +
-            Number(payment.amount || 0),
+          (revenueByCourse.get(payment.courseId) || 0) + paymentInr(payment),
         );
       }
     }
@@ -1314,4 +1313,10 @@ export class AdminService {
       course.updatedAt = new Date();
     }
   }
+}
+
+/** A payment's value in rupees (payments abroad store the INR amount too). */
+function paymentInr(payment: any): number {
+  if (payment.amountInr != null) return Number(payment.amountInr) || 0;
+  return String(payment.currency || 'INR') === 'INR' ? Number(payment.amount || 0) : 0;
 }

@@ -44,7 +44,7 @@ export class PaymentsController {
   @Post('create-order')
   async createOrder(
     @Request() req: any,
-    @Body() dto: { courseId?: string; planId?: string; templateProductIds?: string[]; couponCode?: string; provider?: 'RAZORPAY' | 'LEMON_SQUEEZY' },
+    @Body() dto: { courseId?: string; planId?: string; templateProductIds?: string[]; couponCode?: string; provider?: 'RAZORPAY' | 'LEMON_SQUEEZY'; currency?: string },
   ) {
     return this.paymentsService.createCheckoutOrder({
       ...dto,

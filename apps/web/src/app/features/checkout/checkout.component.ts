@@ -36,7 +36,7 @@ import { LocalPriceService } from '../../core/services/local-price.service';
               @for (item of cart.items(); track item.id) {
                 <div class="flex justify-between items-center py-3 border-b border-[#1E293B]">
                   <div><div class="font-['Hanken_Grotesk'] font-bold text-slate-950 dark:text-white text-base">{{ item.title }}</div><div class="font-['JetBrains_Mono'] text-xs text-slate-600 dark:text-[#d9c3af]">Source ZIP · Permanent dashboard download</div></div>
-                  <div class="font-['JetBrains_Mono'] text-lg font-bold text-slate-950 dark:text-white">₹{{ item.price.toLocaleString('en-IN') }}</div>
+                  <div class="font-['JetBrains_Mono'] text-lg font-bold text-slate-950 dark:text-white">{{ prices.formatCharge(item.price) }}</div>
                 </div>
               }
             } @else {
@@ -46,7 +46,7 @@ import { LocalPriceService } from '../../core/services/local-price.service';
                 <div class="font-['JetBrains_Mono'] text-xs text-[#d9c3af]">Lifetime Access & Source Code</div>
               </div>
               <div class="font-['JetBrains_Mono'] text-lg font-bold text-white">
-                ₹{{ originalAmount().toLocaleString('en-IN') }}
+                {{ prices.formatCharge(originalAmount()) }}
               </div>
             </div>
             }
@@ -76,7 +76,7 @@ import { LocalPriceService } from '../../core/services/local-price.service';
             @if (couponSuccess()) {
               <div class="mt-3 text-xs font-['JetBrains_Mono'] text-[#3B82F6] flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-sm">check_circle</span>
-                Coupon {{ couponResult()?.code }} applied! Discount: ₹{{ couponResult()?.calculatedDiscount }}
+                Coupon {{ couponResult()?.code }} applied! Discount: {{ discountText() }}
               </div>
             }
 
@@ -148,30 +148,30 @@ import { LocalPriceService } from '../../core/services/local-price.service';
             <div class="flex flex-col gap-3 font-['JetBrains_Mono'] text-xs text-[#d9c3af] border-b border-[#1E293B] pb-4 mb-4">
               <div class="flex justify-between">
                 <span>Subtotal:</span>
-                <span>₹{{ originalAmount().toLocaleString('en-IN') }}</span>
+                <span>{{ prices.formatCharge(originalAmount()) }}</span>
               </div>
 
               @if (couponResult() && couponResult()?.calculatedDiscount! > 0) {
                 <div class="flex justify-between text-[#3B82F6]">
                   <span>Discount ({{ couponResult()?.code }}):</span>
-                  <span>-₹{{ couponResult()?.calculatedDiscount?.toLocaleString('en-IN') }}</span>
+                  <span>-{{ discountText() }}</span>
                 </div>
               }
 
               <div class="flex justify-between text-[#a18d7b]">
                 <span>Taxes & GST (Included):</span>
-                <span>₹0</span>
+                <span>{{ prices.formatCharge(0) }}</span>
               </div>
             </div>
 
             <div class="flex justify-between items-baseline mb-6 font-['JetBrains_Mono']">
               <span class="text-xs uppercase text-[#a18d7b]">Total Payable:</span>
-              <span class="text-2xl font-bold text-[#3B82F6]">₹{{ finalAmount().toLocaleString('en-IN') }}</span>
+              <span class="text-2xl font-bold text-[#3B82F6]">{{ prices.formatCharge(finalAmount()) }}</span>
             </div>
-            @if (prices.isConverted() && finalAmount() > 0) {
+            @if (finalAmount() > 0 && prices.chargeCurrency() !== prices.currency()) {
               <p class="-mt-4 mb-6 text-xs text-slate-500 dark:text-[#a18d7b]">
-                About {{ prices.format(finalAmount()) }} in your currency. You'll be charged
-                {{ prices.formatInr(finalAmount()) }} (Indian rupees); your bank converts it.
+                Shown as about {{ prices.format(finalAmount()) }}. You'll be charged
+                {{ prices.formatCharge(finalAmount()) }} ({{ prices.chargeCurrency() }}); your bank converts it.
               </p>
             }
           </div>
@@ -186,7 +186,7 @@ import { LocalPriceService } from '../../core/services/local-price.service';
             @if (isProcessing()) {
               <span class="material-symbols-outlined animate-spin text-sm">progress_activity</span> Processing Order...
             } @else {
-              <span>{{ finalAmount() === 0 ? (templateMode() ? 'Get downloads' : 'Enroll for free') : 'Pay ₹' + finalAmount().toLocaleString('en-IN') }}</span>
+              <span>{{ finalAmount() === 0 ? (templateMode() ? 'Get downloads' : 'Enroll for free') : 'Pay ' + prices.formatCharge(finalAmount()) }}</span>
               <span class="material-symbols-outlined text-sm">lock</span>
             }
           </button>
@@ -331,6 +331,16 @@ export class CheckoutComponent implements OnInit {
     this.couponError.set('');
   }
 
+  /** The coupon saving in the charge currency (subtotal minus total). */
+  discountText() {
+    const subtotal = this.prices.chargeQuote(this.originalAmount());
+    const total = this.prices.chargeQuote(this.finalAmount());
+    return new Intl.NumberFormat(subtotal.currency === 'INR' ? 'en-IN' : undefined, {
+      style: 'currency',
+      currency: subtotal.currency,
+    }).format(Math.max(0, subtotal.amount - total.amount));
+  }
+
   finalAmount = () => {
     const res = this.couponResult();
     return res ? res.finalAmount : this.originalAmount();
@@ -393,6 +403,7 @@ export class CheckoutComponent implements OnInit {
           : undefined,
         couponCode: this.couponResult()?.code || undefined,
         provider: this.selectedProvider(),
+        currency: this.prices.chargeCurrency(),
       })
       .subscribe({
         next: (order) => {

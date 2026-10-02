@@ -6,6 +6,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { TemplatesService } from '../templates/templates.service';
 import { coursePayablePrice } from '../courses/course-price';
+import { FxService } from '../fx/fx.module';
+import { chargeCurrencyFor, convertFromInr, toMinorUnits } from '../fx/currency';
 
 const INITIAL_PLANS = [
   {
@@ -56,7 +58,22 @@ export class PaymentsService implements OnModuleInit {
     private couponsService: CouponsService,
     private config: ConfigService = new ConfigService(),
     private templatesService?: TemplatesService,
+    private fx?: FxService,
   ) {}
+
+  /**
+   * What to charge for an INR price: the visitor's currency (converted at
+   * the server's rate) when we can, otherwise rupees.
+   */
+  async quoteInCurrency(amountInr: number, requested?: string) {
+    const currency = chargeCurrencyFor(requested);
+    const rate = currency === 'INR' ? 1 : await this.fx?.rateFor(currency);
+    if (!rate) {
+      return { currency: 'INR', amount: convertFromInr(amountInr, 'INR', 1), minor: toMinorUnits(amountInr, 'INR') };
+    }
+    const amount = convertFromInr(amountInr, currency, rate);
+    return { currency, amount, minor: toMinorUnits(amount, currency) };
+  }
 
   async onModuleInit() {
     await this.seedMembershipPlans();
@@ -107,7 +124,7 @@ export class PaymentsService implements OnModuleInit {
 
   async createCheckoutOrder(dto: {
     userId: string; courseId?: string; planId?: string; templateProductIds?: string[]; couponCode?: string;
-    provider?: 'RAZORPAY' | 'LEMON_SQUEEZY';
+    provider?: 'RAZORPAY' | 'LEMON_SQUEEZY'; currency?: string;
   }) {
     if (dto.templateProductIds?.length) {
       if (dto.courseId || dto.planId) {
@@ -116,7 +133,7 @@ export class PaymentsService implements OnModuleInit {
       if (dto.couponCode && dto.templateProductIds.length > 1) {
         throw new BadRequestException('A coupon can only be applied when checking out a single template.');
       }
-      return this.createTemplateCheckoutOrder(dto.userId, dto.templateProductIds, dto.provider, dto.couponCode);
+      return this.createTemplateCheckoutOrder(dto.userId, dto.templateProductIds, dto.provider, dto.couponCode, dto.currency);
     }
     if (!dto.courseId || dto.planId) throw new BadRequestException('Membership checkout is not yet configured. Please contact support.');
     const course = await this.findCourse(dto.courseId);
@@ -175,8 +192,9 @@ export class PaymentsService implements OnModuleInit {
     }
 
     if (dto.provider === 'LEMON_SQUEEZY') throw new BadRequestException('International checkout is not configured. Please use Razorpay.');
-    const order = await this.razorpayRequest('orders', { amount, currency: course.currency, receipt: crypto.randomUUID(), partial_payment: false });
-    const data = { userId: dto.userId, courseId: course.id, amount: amount / 100, currency: course.currency,
+    const charge = await this.quoteInCurrency(amount / 100, dto.currency);
+    const order = await this.razorpayRequest('orders', { amount: charge.minor, currency: charge.currency, receipt: crypto.randomUUID(), partial_payment: false });
+    const data = { userId: dto.userId, courseId: course.id, amount: charge.amount, currency: charge.currency, amountInr: amount / 100,
       status: 'PENDING', provider: 'RAZORPAY', paymentIntentId: order.id, couponCode };
     let payment: any;
     if (this.prisma.isDbConnected) payment = await this.prisma.payment.create({ data: data as any });
@@ -185,7 +203,8 @@ export class PaymentsService implements OnModuleInit {
       this.prisma.inMemoryPayments.push(payment);
     }
     return { provider: 'RAZORPAY', paymentId: payment.id, razorpayOrderId: order.id,
-      razorpayKeyId: this.config.get<string>('RAZORPAY_KEY_ID'), amount, currency: course.currency, title: course.title };
+      razorpayKeyId: this.config.get<string>('RAZORPAY_KEY_ID'), amount: charge.minor, displayAmount: charge.amount,
+      currency: charge.currency, title: course.title };
   }
 
   verifyRazorpaySignature(orderId: string, paymentId: string, signature: string, secret?: string): boolean {
@@ -204,7 +223,7 @@ export class PaymentsService implements OnModuleInit {
     }
     // A signature alone does not prove capture or the amount received.
     const received = await this.razorpayRequest(`payments/${encodeURIComponent(dto.razorpayPaymentId)}`);
-    if (received.order_id !== payment.paymentIntentId || received.amount !== Math.round(Number(payment.amount) * 100) ||
+    if (received.order_id !== payment.paymentIntentId || received.amount !== toMinorUnits(Number(payment.amount), payment.currency) ||
       received.currency !== payment.currency || received.status !== 'captured') {
       throw new BadRequestException('Payment is not confirmed yet. Please retry verification or contact support.');
     }
@@ -235,7 +254,7 @@ export class PaymentsService implements OnModuleInit {
       ? await this.prisma.payment.findFirst({ where: { paymentIntentId: received.order_id } })
       : this.prisma.inMemoryPayments.find(item => item.paymentIntentId === received.order_id);
     if (!payment) return { status: 'received', processed: false };
-    if (received.amount !== Math.round(Number(payment.amount) * 100) || received.currency !== payment.currency) {
+    if (received.amount !== toMinorUnits(Number(payment.amount), payment.currency) || received.currency !== payment.currency) {
       throw new BadRequestException('Payment webhook amount does not match the order.');
     }
     await this.confirmPaymentSuccess(payment.id);
@@ -310,6 +329,7 @@ export class PaymentsService implements OnModuleInit {
     requestedIds: string[],
     provider?: 'RAZORPAY' | 'LEMON_SQUEEZY',
     couponCodeInput?: string,
+    requestedCurrency?: string,
   ) {
     if (!this.templatesService) throw new ServiceUnavailableException('Template checkout is not available.');
     const products = await this.templatesService.findCheckoutProducts(requestedIds);
@@ -387,15 +407,19 @@ export class PaymentsService implements OnModuleInit {
       return { provider: 'FREE', completed: true, amount: 0, currency, title };
     }
     if (provider === 'LEMON_SQUEEZY') throw new BadRequestException('International checkout is not configured. Please use Razorpay.');
-    const order = await this.razorpayRequest('orders', { amount, currency, receipt: crypto.randomUUID(), partial_payment: false });
-    const data = { userId, amount: amount / 100, currency, status: 'PENDING', provider: 'RAZORPAY',
-      paymentIntentId: order.id, templateProductIds: productIds, couponCode };
+    const charge = currency === 'INR'
+      ? await this.quoteInCurrency(amount / 100, requestedCurrency)
+      : { currency, amount: amount / 100, minor: toMinorUnits(amount / 100, currency) };
+    const order = await this.razorpayRequest('orders', { amount: charge.minor, currency: charge.currency, receipt: crypto.randomUUID(), partial_payment: false });
+    const data = { userId, amount: charge.amount, currency: charge.currency, amountInr: currency === 'INR' ? amount / 100 : null,
+      status: 'PENDING', provider: 'RAZORPAY', paymentIntentId: order.id, templateProductIds: productIds, couponCode };
     const payment = this.prisma.isDbConnected
       ? await this.prisma.payment.create({ data: data as any })
       : { id: crypto.randomUUID(), ...data, createdAt: new Date(), updatedAt: new Date() };
     if (!this.prisma.isDbConnected) this.prisma.inMemoryPayments.push(payment);
     return { provider: 'RAZORPAY', paymentId: payment.id, razorpayOrderId: order.id,
-      razorpayKeyId: this.config.get<string>('RAZORPAY_KEY_ID'), amount, currency, title };
+      razorpayKeyId: this.config.get<string>('RAZORPAY_KEY_ID'), amount: charge.minor, displayAmount: charge.amount,
+      currency: charge.currency, title };
   }
 
   private templateIds(value: unknown): string[] {

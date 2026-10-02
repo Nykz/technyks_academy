@@ -113,8 +113,8 @@ import { LocalPriceService } from '../../core/services/local-price.service';
                 <span class="font-semibold">Regular License</span>
                 <span class="text-3xl font-bold">{{ money(t) }}</span>
               </div>
-              @if (prices.isConverted()) {
-                <p class="mt-1 text-right text-xs text-slate-500">Charged as {{ prices.formatInr(t.price) }}</p>
+              @if (prices.chargeCurrency() !== prices.currency()) {
+                <p class="mt-1 text-right text-xs text-slate-500">Charged as {{ prices.formatCharge(t.price) }}</p>
               }
               <ul class="mt-4 space-y-2 text-sm text-slate-700 dark:text-slate-300">
                 @for (line of licenseLines; track line) {
