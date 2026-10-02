@@ -1,5 +1,6 @@
 import {
   Component,
+  computed,
   OnDestroy,
   OnInit,
   PLATFORM_ID,
@@ -13,6 +14,9 @@ import { CourseCardComponent } from '../../core/components/course-card/course-ca
 import { SkeletonLoaderComponent } from '../../core/components/skeleton/skeleton-loader.component';
 import { SiteSettingsService } from '../../core/services/site-settings.service';
 import { AuthService } from '../../core/services/auth.service';
+import { TemplatesService, UiTemplate } from '../../core/services/templates.service';
+import { TemplateCardComponent } from '../../core/components/template-card/template-card.component';
+import { Router } from '@angular/router';
 
 import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
 
@@ -25,6 +29,7 @@ import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
     CourseCardComponent,
     SkeletonLoaderComponent,
     LocalPricePipe,
+    TemplateCardComponent,
   ],
   template: `
     <div class="flex flex-col gap-16 sm:gap-20 lg:gap-24 pb-16 sm:pb-20 pt-0">
@@ -189,6 +194,91 @@ import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
             they are published from the admin panel.
           </div>
         }
+      </section>
+
+      <!-- Real numbers strip -->
+      @if (!isLoading() && (courseCount() || templateCount())) {
+        <section class="px-4 sm:px-6 md:px-16 -mt-6 sm:-mt-8">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            @for (stat of stats(); track stat.label) {
+              <div class="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 shadow-sm dark:border-[#1E293B] dark:bg-[#121A2B]">
+                <span class="material-symbols-outlined text-2xl text-[#2563EB] dark:text-[#3B82F6]">{{ stat.icon }}</span>
+                <p class="mt-2 font-['Hanken_Grotesk'] text-2xl sm:text-3xl font-bold text-slate-950 dark:text-white">{{ stat.value }}</p>
+                <p class="text-xs sm:text-sm text-slate-600 dark:text-[#a18d7b]">{{ stat.label }}</p>
+              </div>
+            }
+          </div>
+        </section>
+      }
+
+      <!-- UI Templates -->
+      @if (templatesLoading() || templates().length) {
+        <section class="px-4 sm:px-6 md:px-16">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-8 border-b border-slate-200 dark:border-[#1E293B] pb-4">
+            <div>
+              <span class="font-['JetBrains_Mono'] text-xs uppercase text-[#2563EB] dark:text-[#3B82F6] tracking-widest font-semibold">UI TEMPLATES</span>
+              <h2 class="font-['Hanken_Grotesk'] text-2xl md:text-3xl font-bold text-slate-950 dark:text-white mt-1">
+                Production-ready UI templates
+              </h2>
+              <p class="mt-2 max-w-2xl text-sm text-slate-600 dark:text-[#d9c3af]">
+                Complete source code for apps, dashboards and admin panels. Buy once, download the ZIP and keep it in your account forever.
+              </p>
+            </div>
+            <a routerLink="/templates" class="inline-flex shrink-0 items-center gap-1 font-['JetBrains_Mono'] text-xs font-bold text-[#2563EB] dark:text-[#3B82F6] hover:underline">
+              Browse all templates
+              <span class="material-symbols-outlined text-sm">chevron_right</span>
+            </a>
+          </div>
+
+          @if (templatesLoading()) {
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              @for (placeholder of [1, 2, 3]; track placeholder) {
+                <div class="animate-pulse overflow-hidden rounded border border-slate-200 bg-white dark:border-white/10 dark:bg-[#121A2B]">
+                  <div class="aspect-[59/30] bg-slate-200 dark:bg-white/10"></div>
+                  <div class="space-y-3 p-4">
+                    <div class="h-4 w-3/4 rounded bg-slate-200 dark:bg-white/10"></div>
+                    <div class="h-8 w-full rounded bg-slate-200 dark:bg-white/10"></div>
+                  </div>
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              @for (item of templates(); track item.id) {
+                <app-template-card [item]="item" (categoryClick)="openTemplateCategory()" />
+              }
+            </div>
+            @if (templateCount() > templates().length) {
+              <div class="mt-8 text-center">
+                <a routerLink="/templates" class="inline-flex items-center gap-2 rounded-lg border border-[#2563EB] px-6 py-3 font-['JetBrains_Mono'] text-xs font-bold uppercase text-[#2563EB] hover:bg-blue-50 dark:border-[#3B82F6] dark:text-[#3B82F6] dark:hover:bg-[#3B82F6]/10">
+                  View all {{ templateCount() }} templates
+                  <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                </a>
+              </div>
+            }
+          }
+        </section>
+      }
+
+      <!-- Why Technyks -->
+      <section class="px-4 sm:px-6 md:px-16">
+        <div class="mb-8 text-center">
+          <span class="font-['JetBrains_Mono'] text-xs uppercase text-[#2563EB] dark:text-[#3B82F6] tracking-widest font-semibold">WHY TECHNYKS</span>
+          <h2 class="font-['Hanken_Grotesk'] text-2xl md:text-3xl font-bold text-slate-950 dark:text-white mt-1">
+            Learn it, build it, prove it
+          </h2>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+          @for (feature of features; track feature.title) {
+            <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-[#1E293B] dark:bg-[#121A2B]">
+              <span class="grid h-11 w-11 place-items-center rounded-lg bg-blue-50 text-[#2563EB] dark:bg-[#3B82F6]/15 dark:text-[#3B82F6]">
+                <span class="material-symbols-outlined">{{ feature.icon }}</span>
+              </span>
+              <h3 class="mt-4 font-['Hanken_Grotesk'] text-lg font-bold text-slate-950 dark:text-white">{{ feature.title }}</h3>
+              <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-[#d9c3af]">{{ feature.text }}</p>
+            </div>
+          }
+        </div>
       </section>
 
       <!-- Detailed Membership & Pricing Section -->
@@ -424,8 +514,44 @@ export class HomeComponent implements OnInit, OnDestroy {
   private platformId = inject(PLATFORM_ID);
   readonly authService = inject(AuthService);
 
+  private templatesService = inject(TemplatesService);
+  private router = inject(Router);
+
   featuredCourses = signal<Course[]>([]);
   isLoading = signal(true);
+  private allCourses = signal<Course[]>([]);
+  private allTemplates = signal<UiTemplate[]>([]);
+  templatesLoading = signal(true);
+  /** Up to six templates (featured first, as the API orders them). */
+  readonly templates = computed(() => this.allTemplates().slice(0, 6));
+  readonly courseCount = computed(() => this.allCourses().length);
+  readonly templateCount = computed(() => this.allTemplates().length);
+  readonly lessonCount = computed(() =>
+    this.allCourses().reduce(
+      (total, course) => total + (course.modules || []).reduce((sum, module) => sum + (module.lessons?.length || 0), 0),
+      0,
+    ),
+  );
+  /** Only real numbers from the catalog. */
+  readonly stats = computed(() =>
+    [
+      { icon: 'school', value: this.courseCount(), label: 'Courses' },
+      { icon: 'play_circle', value: this.lessonCount(), label: 'Video lessons' },
+      { icon: 'web', value: this.templateCount(), label: 'UI templates' },
+      { icon: 'workspace_premium', value: '✓', label: 'Certificate on completion' },
+    ].filter((stat) => stat.value !== 0),
+  );
+
+  readonly features = [
+    { icon: 'construction', title: 'Project-based courses', text: 'Build real apps step by step instead of only watching theory.' },
+    { icon: 'workspace_premium', title: 'Verified certificates', text: 'Finish a course to get a PDF certificate with a QR code employers can verify.' },
+    { icon: 'all_inclusive', title: 'Lifetime access', text: 'Courses and template downloads stay in your account. Learn on any device.' },
+    { icon: 'forum', title: 'Ask questions', text: 'Post questions under any lesson and get answers from the instructor.' },
+  ];
+
+  openTemplateCategory() {
+    this.router.navigate(['/templates']);
+  }
   typedTopic = signal('NN');
   private typingTopicIndex = 0;
   private typingCharacterIndex = 2;
@@ -442,10 +568,18 @@ export class HomeComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.coursesService.getCourses().subscribe({
       next: (courses) => {
+        this.allCourses.set(courses);
         this.featuredCourses.set(courses.slice(0, 3));
         this.isLoading.set(false);
       },
       error: () => this.isLoading.set(false),
+    });
+    this.templatesService.list().subscribe({
+      next: (items) => {
+        this.allTemplates.set(items || []);
+        this.templatesLoading.set(false);
+      },
+      error: () => this.templatesLoading.set(false),
     });
     if (isPlatformBrowser(this.platformId)) {
       this.runTypingAnimation();
