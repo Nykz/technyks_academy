@@ -1,4 +1,4 @@
-import { PRODUCTION_API_ORIGIN, isLocalBrowser } from './api-origin';
+import { PRODUCTION_API_ORIGIN, isLocalBrowser, sameOriginApiAvailable } from './api-origin';
 
 /**
  * Uploaded course/template media (thumbnails, directly-uploaded intro
@@ -38,7 +38,13 @@ export function resolveMediaUrl(
     return url;
   }
 
-  // SSR and every deployed environment: the web origin never serves
-  // /uploads, so always point explicitly at the API origin.
+  // Uploaded images live in the database, which technyks.com also serves,
+  // so on technyks.com they load from the same origin. That keeps pictures
+  // working on networks that cannot reach api.technyks.com (some VPNs).
+  if (sameOriginApiAvailable() && url.startsWith('/uploads/course-media/image-')) {
+    return url;
+  }
+
+  // Videos and everything else are files on the API server's disk.
   return `${PRODUCTION_API_ORIGIN}${url}`;
 }

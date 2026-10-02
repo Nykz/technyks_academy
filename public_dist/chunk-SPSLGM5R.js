@@ -1,1 +1,0 @@
-import{a}from"./chunk-67VFMRZK.js";import{ba as n,y as t}from"./chunk-TCWBEWL7.js";var o=class r{prices=t(a);transform(i,e="INR"){return this.prices.format(i,e)}static \u0275fac=function(e){return new(e||r)};static \u0275pipe=n({name:"localPrice",type:r,pure:!1})};export{o as a};

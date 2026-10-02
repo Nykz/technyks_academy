@@ -1,1 +1,0 @@
-var r="https://api.technyks.com";function n(){return typeof window>"u"?!1:window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1"}function s(o){let t=String(o??"").trim();return t?/^(https?:|data:|blob:)/i.test(t)||!t.startsWith("/")||t.startsWith("/assets/")||n()?t:`${r}${t}`:null}export{r as a,n as b,s as c};
