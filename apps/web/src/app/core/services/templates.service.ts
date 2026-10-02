@@ -22,6 +22,11 @@ export interface UiTemplate {
   downloadButtonText?: string | null;
   buyerMessage?: string | null;
   deliveryType?: 'file' | 'external';
+  /** Number of purchases (shown as "N sales"). */
+  salesCount?: number;
+  /** ZIP size in bytes, when the file is stored on our server. */
+  fileSize?: number | null;
+  createdAt?: string;
   updatedAt?: string;
 }
 

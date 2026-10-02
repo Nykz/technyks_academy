@@ -176,7 +176,7 @@ type AdminTab =
                       {{ course.title }}
                     </h3>
 
-                    <div class="flex items-center gap-3 font-['JetBrains_Mono'] text-[11px]">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 font-['JetBrains_Mono'] text-[11px]">
                       <span
                         [class.bg-[#3B82F6]/20]="course.status === 'LIVE'"
                         [class.text-[#3B82F6]]="course.status === 'LIVE'"

@@ -62,12 +62,12 @@ import { LocalPriceService } from '../../core/services/local-price.service';
                 [(ngModel)]="couponCode"
                 (ngModelChange)="clearCoupon()"
                 placeholder="Enter code (e.g. TECHNYKS50)"
-                class="flex-grow rounded border border-slate-300 bg-white px-4 py-2.5 font-['JetBrains_Mono'] text-xs uppercase text-slate-900 caret-slate-900 placeholder:text-slate-400 focus:border-[#2563EB] focus:outline-none dark:border-[#1E293B] dark:bg-[#040810] dark:text-white dark:caret-white dark:placeholder:text-slate-500 dark:focus:border-[#3B82F6]"
+                class="min-w-0 flex-grow rounded border border-slate-300 bg-white px-4 py-2.5 font-['JetBrains_Mono'] text-xs uppercase text-slate-900 caret-slate-900 placeholder:text-slate-400 focus:border-[#2563EB] focus:outline-none dark:border-[#1E293B] dark:bg-[#040810] dark:text-white dark:caret-white dark:placeholder:text-slate-500 dark:focus:border-[#3B82F6]"
               />
               <button
                 (click)="applyCoupon()"
                 [disabled]="isApplyingCoupon()"
-                class="font-['JetBrains_Mono'] text-xs font-bold uppercase text-[#040810] bg-[#3B82F6] px-5 py-2.5 rounded hover:bg-[#3B82F6]/90 transition-colors"
+                class="shrink-0 font-['JetBrains_Mono'] text-xs font-bold uppercase text-[#040810] bg-[#3B82F6] px-4 sm:px-5 py-2.5 rounded hover:bg-[#3B82F6]/90 transition-colors"
               >
                 Apply
               </button>

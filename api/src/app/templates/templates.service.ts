@@ -54,7 +54,26 @@ export class TemplatesService implements OnModuleInit {
             (a, b) =>
               Number(Boolean(b.isFeatured)) - Number(Boolean(a.isFeatured)),
           );
-    return items.map((item) => this.toPublic(item));
+    const sales = await this.salesCounts(items.map((item: any) => item.id));
+    return items.map((item) => ({ ...this.toPublic(item), salesCount: sales.get(item.id) || 0 }));
+  }
+
+  /** How many times each template has been bought. */
+  private async salesCounts(ids: string[]): Promise<Map<string, number>> {
+    if (!ids.length) return new Map();
+    if (this.prisma.isDbConnected) {
+      const rows = await this.prisma.uiTemplatePurchase.groupBy({
+        by: ['productId'],
+        where: { productId: { in: ids } },
+        _count: { _all: true },
+      });
+      return new Map(rows.map((row: any) => [row.productId, row._count._all]));
+    }
+    const counts = new Map<string, number>();
+    for (const purchase of this.prisma.inMemoryUiTemplatePurchases) {
+      if (ids.includes(purchase.productId)) counts.set(purchase.productId, (counts.get(purchase.productId) || 0) + 1);
+    }
+    return counts;
   }
 
   async getPublicBySlug(slug: string) {
@@ -69,7 +88,8 @@ export class TemplatesService implements OnModuleInit {
           (candidate) => candidate.slug === cleanSlug && candidate.isPublished,
         );
     if (!item) throw new NotFoundException('UI template not found.');
-    return this.toPublic(item);
+    const sales = await this.salesCounts([item.id]);
+    return { ...this.toPublic(item), salesCount: sales.get(item.id) || 0 };
   }
 
   async findCheckoutProducts(ids: string[]) {
@@ -501,6 +521,8 @@ export class TemplatesService implements OnModuleInit {
       isFeatured: Boolean(item.isFeatured),
       gallery: this.cleanStoredGallery(item.gallery),
       fileReady: Boolean(item.filePath || item.deliveryUrl),
+      fileSize: item.filePath ? Number(item.fileSize) || null : null,
+      createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
   }
