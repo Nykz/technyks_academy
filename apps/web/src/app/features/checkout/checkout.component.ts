@@ -14,6 +14,7 @@ import { TemplateCartService } from '../../core/services/template-cart.service';
 import { TemplatesService } from '../../core/services/templates.service';
 
 import { LocalPriceService } from '../../core/services/local-price.service';
+import { trackGoogleAdsPurchase } from '../../core/utils/google-ads';
 
 @Component({
   selector: 'app-checkout',
@@ -464,10 +465,17 @@ export class CheckoutComponent implements OnInit {
               razorpaySignature: result.razorpay_signature,
             })
             .subscribe({
-              next: () => {
+              next: (verified: any) => {
                 this.isProcessing.set(false);
+                // Only after the server verified the payment. Prefer the
+                // verified record; fall back to this order's own figures.
+                trackGoogleAdsPurchase({
+                  id: verified?.id || order.paymentId,
+                  amount: Number(verified?.amount ?? order.displayAmount),
+                  currency: verified?.currency || order.currency,
+                });
                 if (this.templateMode()) this.cart.clear();
-                this.router.navigate(['/dashboard']);
+                this.router.navigate(['/thank-you']);
               },
               error: () => {
                 this.isProcessing.set(false);

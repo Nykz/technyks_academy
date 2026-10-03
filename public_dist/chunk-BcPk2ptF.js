@@ -1,0 +1,1 @@
+import{Gt as kc,Pt as h}from"./main-M7BPYD76.js";import{t as I}from"./chunk-D3maXT3N.js";var o=class r{prices=h(I);transform(i,e=`INR`){return this.prices.format(i,e)}static ɵfac=function(e){return new(e||r)};static ɵpipe=kc({name:`localPrice`,type:r,pure:!1})};export{o as t};

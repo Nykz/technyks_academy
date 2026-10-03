@@ -68,6 +68,13 @@ export const appRoutes: Routes = [
       ),
   },
   {
+    path: 'thank-you',
+    loadComponent: () =>
+      import('./features/thank-you/thank-you.component').then(
+        (m) => m.ThankYouComponent,
+      ),
+  },
+  {
     path: 'checkout',
     canActivate: [authGuard, onboardingGuard],
     loadComponent: () =>
