@@ -201,6 +201,13 @@ if (isApiBuild) {
       rootPackage.dependencies[name],
     ]),
   );
+  // "$name" overrides point at root dependencies the runtime package
+  // doesn't have, so only plain version overrides are carried over.
+  const runtimeOverrides = Object.fromEntries(
+    Object.entries(rootPackage.overrides || {}).filter(
+      ([, version]) => typeof version === 'string' && !version.startsWith('$'),
+    ),
+  );
   function createRuntimePackage(outputDir, mainFile) {
     const runtimePackage = {
       name: `${rootPackage.name}-api`,
@@ -219,6 +226,8 @@ if (isApiBuild) {
       prisma: {
         schema: 'prisma/schema.prisma',
       },
+      // Security floors for sub-dependencies such as multer and qs.
+      ...(Object.keys(runtimeOverrides).length ? { overrides: runtimeOverrides } : {}),
     };
 
     const runtimePrismaDir = join(outputDir, 'prisma');
