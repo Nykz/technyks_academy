@@ -27,7 +27,7 @@ export interface MembershipPlan {
 }
 
 export interface OrderResponse {
-  provider: 'RAZORPAY' | 'LEMON_SQUEEZY' | 'FREE';
+  provider: 'RAZORPAY' | 'LEMON_SQUEEZY' | 'STRIPE' | 'FREE';
   completed?: boolean;
   paymentId: string;
   razorpayOrderId?: string;
@@ -61,5 +61,20 @@ export class PaymentsService {
 
   verifyRazorpay(payload: { paymentId: string; razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }): Observable<any> {
     return this.http.post<any>('/api/payments/verify-razorpay', payload);
+  }
+
+  /** Which gateways the server has keys for. */
+  availability(): Observable<{ razorpay: boolean; stripe: boolean }> {
+    return this.http.get<{ razorpay: boolean; stripe: boolean }>('/api/payments/availability');
+  }
+
+  /** After Stripe sends the buyer back: the server confirms with Stripe and enrolls. */
+  verifyStripe(paymentId: string): Observable<any> {
+    return this.http.post<any>('/api/payments/verify-stripe', { paymentId });
+  }
+
+  /** Re-checks a started payment with its gateway (reload / closed tab). */
+  reconcile(paymentId: string): Observable<{ status: 'SUCCESS' | 'PENDING' | 'UNPAID' | 'EXPIRED' | 'FAILED' | string; payment?: any }> {
+    return this.http.post<any>('/api/payments/reconcile', { paymentId });
   }
 }

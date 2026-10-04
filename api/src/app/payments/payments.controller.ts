@@ -44,7 +44,7 @@ export class PaymentsController {
   @Post('create-order')
   async createOrder(
     @Request() req: any,
-    @Body() dto: { courseId?: string; planId?: string; templateProductIds?: string[]; couponCode?: string; provider?: 'RAZORPAY' | 'LEMON_SQUEEZY'; currency?: string },
+    @Body() dto: { courseId?: string; planId?: string; templateProductIds?: string[]; couponCode?: string; provider?: 'RAZORPAY' | 'LEMON_SQUEEZY' | 'STRIPE'; currency?: string },
   ) {
     return this.paymentsService.createCheckoutOrder({
       ...dto,
@@ -60,6 +60,27 @@ export class PaymentsController {
     @Body() dto: { paymentId: string; razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }
   ) {
     return this.paymentsService.verifyPayment(req.user.id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('verify-stripe')
+  async verifyStripe(@Request() req: any, @Body() dto: { paymentId: string }) {
+    return this.paymentsService.verifyStripePayment(req.user.id, String(dto?.paymentId || ''));
+  }
+
+  /** Re-checks a pending payment with its gateway (reload / closed tab). */
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('reconcile')
+  async reconcile(@Request() req: any, @Body() dto: { paymentId: string }) {
+    return this.paymentsService.reconcilePayment(req.user.id, String(dto?.paymentId || ''));
+  }
+
+  @SkipThrottle()
+  @Post('stripe-webhook')
+  async handleStripeWebhook(@Request() req: any, @Headers('stripe-signature') signature: string) {
+    return this.paymentsService.handleStripeWebhook(req.rawBody, signature);
   }
 
   @SkipThrottle()

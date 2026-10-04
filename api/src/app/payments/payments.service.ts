@@ -1,5 +1,5 @@
 import { ServiceUnavailableException } from '@nestjs/common';
-import { Injectable, BadRequestException, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,6 +8,9 @@ import { TemplatesService } from '../templates/templates.service';
 import { coursePayablePrice } from '../courses/course-price';
 import { FxService } from '../fx/fx.module';
 import { chargeCurrencyFor, convertFromInr, toMinorUnits } from '../fx/currency';
+import { stripeForm, verifyStripeSignature } from './stripe';
+
+type CheckoutProvider = 'RAZORPAY' | 'LEMON_SQUEEZY' | 'STRIPE';
 
 const INITIAL_PLANS = [
   {
@@ -119,12 +122,17 @@ export class PaymentsService implements OnModuleInit {
   }
 
   getCheckoutAvailability() {
-    return { razorpay: Boolean(this.config.get<string>('RAZORPAY_KEY_ID') && this.config.get<string>('RAZORPAY_KEY_SECRET')), lemonSqueezy: false, memberships: false };
+    return {
+      razorpay: Boolean(this.config.get<string>('RAZORPAY_KEY_ID') && this.config.get<string>('RAZORPAY_KEY_SECRET')),
+      stripe: Boolean(this.config.get<string>('STRIPE_SECRET_KEY')),
+      lemonSqueezy: false,
+      memberships: false,
+    };
   }
 
   async createCheckoutOrder(dto: {
     userId: string; courseId?: string; planId?: string; templateProductIds?: string[]; couponCode?: string;
-    provider?: 'RAZORPAY' | 'LEMON_SQUEEZY'; currency?: string;
+    provider?: CheckoutProvider; currency?: string;
   }) {
     if (dto.templateProductIds?.length) {
       if (dto.courseId || dto.planId) {
@@ -191,20 +199,165 @@ export class PaymentsService implements OnModuleInit {
       return { provider: 'FREE', completed: true, amount: 0, currency: course.currency, title: course.title };
     }
 
-    if (dto.provider === 'LEMON_SQUEEZY') throw new BadRequestException('International checkout is not configured. Please use Razorpay.');
-    const charge = await this.quoteInCurrency(amount / 100, dto.currency);
-    const order = await this.razorpayRequest('orders', { amount: charge.minor, currency: charge.currency, receipt: crypto.randomUUID(), partial_payment: false });
-    const data = { userId: dto.userId, courseId: course.id, amount: charge.amount, currency: charge.currency, amountInr: amount / 100,
-      status: 'PENDING', provider: 'RAZORPAY', paymentIntentId: order.id, couponCode };
-    let payment: any;
-    if (this.prisma.isDbConnected) payment = await this.prisma.payment.create({ data: data as any });
-    else {
-      payment = { id: crypto.randomUUID(), ...data, createdAt: new Date(), updatedAt: new Date() };
-      this.prisma.inMemoryPayments.push(payment);
+    return this.startGatewayOrder({
+      userId: dto.userId,
+      provider: dto.provider,
+      title: course.title,
+      amountInr: amount / 100,
+      requestedCurrency: dto.currency,
+      couponCode,
+      courseId: course.id,
+    });
+  }
+
+  private get webAppUrl() {
+    return String(this.config.get<string>('WEB_APP_URL') || 'https://technyks.com').replace(/\/$/, '');
+  }
+
+  /**
+   * Creates the gateway order (Razorpay order or Stripe Checkout session)
+   * and the PENDING payment row for a paid checkout. The payment ID is made
+   * first so Stripe can send the buyer back to it.
+   */
+  private async startGatewayOrder(p: {
+    userId: string;
+    provider?: CheckoutProvider;
+    title: string;
+    amountInr: number | null;
+    requestedCurrency?: string;
+    fixedCharge?: { currency: string; amount: number; minor: number };
+    couponCode: string | null;
+    courseId?: string;
+    templateProductIds?: string[];
+  }) {
+    if (p.provider === 'LEMON_SQUEEZY') throw new BadRequestException('This payment method is not available. Please choose another.');
+    const charge = p.fixedCharge ?? (await this.quoteInCurrency(Number(p.amountInr), p.requestedCurrency));
+    const paymentId = crypto.randomUUID();
+    const base = {
+      id: paymentId, userId: p.userId, amount: charge.amount, currency: charge.currency, amountInr: p.amountInr,
+      status: 'PENDING', couponCode: p.couponCode,
+      ...(p.courseId ? { courseId: p.courseId } : {}),
+      ...(p.templateProductIds ? { templateProductIds: p.templateProductIds } : {}),
+    };
+
+    if (p.provider === 'STRIPE') {
+      const returnTo = p.courseId ? `courseId=${encodeURIComponent(p.courseId)}` : 'templateCart=1';
+      const session = await this.stripeRequest('checkout/sessions', {
+        mode: 'payment',
+        client_reference_id: paymentId,
+        success_url: `${this.webAppUrl}/checkout?payment_return=${paymentId}`,
+        cancel_url: `${this.webAppUrl}/checkout?${returnTo}&payment_cancelled=${paymentId}`,
+        metadata: { payment_id: paymentId },
+        payment_intent_data: { metadata: { payment_id: paymentId } },
+        line_items: {
+          0: {
+            quantity: 1,
+            price_data: { currency: charge.currency.toLowerCase(), unit_amount: charge.minor, product_data: { name: p.title } },
+          },
+        },
+      });
+      await this.savePayment({ ...base, provider: 'STRIPE', paymentIntentId: session.id });
+      return { provider: 'STRIPE', paymentId, checkoutUrl: session.url, amount: charge.minor, displayAmount: charge.amount,
+        currency: charge.currency, title: p.title };
     }
-    return { provider: 'RAZORPAY', paymentId: payment.id, razorpayOrderId: order.id,
+
+    const order = await this.razorpayRequest('orders', { amount: charge.minor, currency: charge.currency, receipt: paymentId, partial_payment: false });
+    await this.savePayment({ ...base, provider: 'RAZORPAY', paymentIntentId: order.id });
+    return { provider: 'RAZORPAY', paymentId, razorpayOrderId: order.id,
       razorpayKeyId: this.config.get<string>('RAZORPAY_KEY_ID'), amount: charge.minor, displayAmount: charge.amount,
-      currency: charge.currency, title: course.title };
+      currency: charge.currency, title: p.title };
+  }
+
+  private async savePayment(data: Record<string, any>) {
+    if (this.prisma.isDbConnected) return this.prisma.payment.create({ data: data as any });
+    const payment = { ...data, createdAt: new Date(), updatedAt: new Date() };
+    this.prisma.inMemoryPayments.push(payment);
+    return payment;
+  }
+
+  /** Stripe Checkout session paid in full for exactly this payment. */
+  private stripeSessionMatches(session: any, payment: any) {
+    return Boolean(
+      session &&
+      session.id === payment.paymentIntentId &&
+      session.client_reference_id === payment.id &&
+      session.payment_status === 'paid' &&
+      session.amount_total === toMinorUnits(Number(payment.amount), payment.currency) &&
+      String(session.currency || '').toUpperCase() === payment.currency,
+    );
+  }
+
+  /** Called when Stripe sends the buyer back: confirms with Stripe, then enrolls. */
+  async verifyStripePayment(userId: string, paymentId: string) {
+    const payment = await this.findPayment(paymentId);
+    if (!payment || payment.userId !== userId || payment.provider !== 'STRIPE') {
+      throw new BadRequestException('Payment verification failed.');
+    }
+    if (payment.status === 'SUCCESS') return { ...payment };
+    const session = await this.stripeRequest(`checkout/sessions/${encodeURIComponent(payment.paymentIntentId)}`);
+    if (!this.stripeSessionMatches(session, payment)) {
+      throw new BadRequestException('Payment is not confirmed yet. Please retry verification or contact support.');
+    }
+    return this.confirmPaymentSuccess(payment.id);
+  }
+
+  /**
+   * Re-checks a pending payment with its gateway, e.g. after the buyer
+   * reloaded or closed the tab during payment. Completes the enrollment if
+   * the gateway shows the full amount was captured.
+   */
+  async reconcilePayment(userId: string, paymentId: string) {
+    const payment = await this.findPayment(paymentId);
+    if (!payment || payment.userId !== userId) throw new NotFoundException('Payment not found.');
+    if (payment.status === 'SUCCESS') return { status: 'SUCCESS', payment: { ...payment } };
+    if (payment.status !== 'PENDING') return { status: payment.status };
+
+    if (payment.provider === 'STRIPE') {
+      const session = await this.stripeRequest(`checkout/sessions/${encodeURIComponent(payment.paymentIntentId)}`);
+      if (this.stripeSessionMatches(session, payment)) {
+        return { status: 'SUCCESS', payment: await this.confirmPaymentSuccess(payment.id) };
+      }
+      if (session?.status === 'expired') return { status: 'EXPIRED' };
+      // 'complete' but not yet paid = a delayed payment method still processing.
+      return { status: session?.status === 'complete' ? 'PENDING' : 'UNPAID' };
+    }
+    if (payment.provider === 'RAZORPAY') {
+      const result = await this.razorpayRequest(`orders/${encodeURIComponent(payment.paymentIntentId)}/payments`);
+      const captured = (result?.items || []).find((item: any) =>
+        item.status === 'captured' && item.order_id === payment.paymentIntentId &&
+        item.amount === toMinorUnits(Number(payment.amount), payment.currency) && item.currency === payment.currency);
+      if (captured) return { status: 'SUCCESS', payment: await this.confirmPaymentSuccess(payment.id) };
+      // 'authorized' = bank approved, capture still in progress.
+      const inProgress = (result?.items || []).some((item: any) => ['created', 'authorized'].includes(item.status));
+      return { status: inProgress ? 'PENDING' : 'UNPAID' };
+    }
+    return { status: 'PENDING' };
+  }
+
+  /** Stripe webhook: completes payments even if the buyer never returns. */
+  async handleStripeWebhook(rawBody: Buffer | undefined, signature: string | undefined) {
+    const secret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
+    if (!secret) throw new ServiceUnavailableException('Stripe webhook is not configured.');
+    if (!rawBody || !verifyStripeSignature(rawBody, signature, secret)) {
+      throw new BadRequestException('Invalid Stripe webhook signature.');
+    }
+    let event: any;
+    try { event = JSON.parse(rawBody.toString('utf8')); }
+    catch { throw new BadRequestException('Invalid Stripe webhook payload.'); }
+    if (!['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(event?.type)) {
+      return { received: true, processed: false };
+    }
+    const session = event?.data?.object;
+    if (!session?.id || session.payment_status !== 'paid') return { received: true, processed: false };
+    const payment = this.prisma.isDbConnected
+      ? await this.prisma.payment.findFirst({ where: { paymentIntentId: session.id } })
+      : this.prisma.inMemoryPayments.find((item) => item.paymentIntentId === session.id);
+    if (!payment) return { received: true, processed: false };
+    if (!this.stripeSessionMatches(session, payment)) {
+      throw new BadRequestException('Stripe webhook amount does not match the order.');
+    }
+    await this.confirmPaymentSuccess(payment.id);
+    return { received: true, processed: true };
   }
 
   verifyRazorpaySignature(orderId: string, paymentId: string, signature: string, secret?: string): boolean {
@@ -327,7 +480,7 @@ export class PaymentsService implements OnModuleInit {
   private async createTemplateCheckoutOrder(
     userId: string,
     requestedIds: string[],
-    provider?: 'RAZORPAY' | 'LEMON_SQUEEZY',
+    provider?: CheckoutProvider,
     couponCodeInput?: string,
     requestedCurrency?: string,
   ) {
@@ -406,20 +559,18 @@ export class PaymentsService implements OnModuleInit {
       }
       return { provider: 'FREE', completed: true, amount: 0, currency, title };
     }
-    if (provider === 'LEMON_SQUEEZY') throw new BadRequestException('International checkout is not configured. Please use Razorpay.');
-    const charge = currency === 'INR'
-      ? await this.quoteInCurrency(amount / 100, requestedCurrency)
-      : { currency, amount: amount / 100, minor: toMinorUnits(amount / 100, currency) };
-    const order = await this.razorpayRequest('orders', { amount: charge.minor, currency: charge.currency, receipt: crypto.randomUUID(), partial_payment: false });
-    const data = { userId, amount: charge.amount, currency: charge.currency, amountInr: currency === 'INR' ? amount / 100 : null,
-      status: 'PENDING', provider: 'RAZORPAY', paymentIntentId: order.id, templateProductIds: productIds, couponCode };
-    const payment = this.prisma.isDbConnected
-      ? await this.prisma.payment.create({ data: data as any })
-      : { id: crypto.randomUUID(), ...data, createdAt: new Date(), updatedAt: new Date() };
-    if (!this.prisma.isDbConnected) this.prisma.inMemoryPayments.push(payment);
-    return { provider: 'RAZORPAY', paymentId: payment.id, razorpayOrderId: order.id,
-      razorpayKeyId: this.config.get<string>('RAZORPAY_KEY_ID'), amount: charge.minor, displayAmount: charge.amount,
-      currency: charge.currency, title };
+    return this.startGatewayOrder({
+      userId,
+      provider,
+      title,
+      amountInr: currency === 'INR' ? amount / 100 : null,
+      fixedCharge: currency === 'INR'
+        ? undefined
+        : { currency, amount: amount / 100, minor: toMinorUnits(amount / 100, currency) },
+      requestedCurrency,
+      couponCode,
+      templateProductIds: productIds,
+    });
   }
 
   private templateIds(value: unknown): string[] {
@@ -441,6 +592,28 @@ export class PaymentsService implements OnModuleInit {
   private async findCourse(id: string) {
     if (this.prisma.isDbConnected) return this.prisma.course.findFirst({ where: { id, isArchived: false } });
     return this.prisma.inMemoryCourses.find(c => c.id === id && !c.isArchived);
+  }
+
+  private readonly logger = new Logger(PaymentsService.name);
+
+  private async stripeRequest(path: string, body?: Record<string, unknown>): Promise<any> {
+    const secret = this.config.get<string>('STRIPE_SECRET_KEY');
+    if (!secret) throw new ServiceUnavailableException('International payments are not configured yet. Please contact support.');
+    const response = await fetch(`https://api.stripe.com/v1/${path}`, {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
+      },
+      ...(body ? { body: stripeForm(body).join('&') } : {}),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null);
+      this.logger.warn(`Stripe ${path} failed (${response.status}): ${detail?.error?.message || 'no details'}`);
+      throw new ServiceUnavailableException('Payment provider could not process the request. Please retry.');
+    }
+    return response.json();
   }
 
   private async razorpayRequest(path: string, body?: unknown): Promise<any> {

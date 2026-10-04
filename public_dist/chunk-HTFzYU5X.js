@@ -1,0 +1,1 @@
+import{nn as kc}from"./chunk-Dc-7NdKr.js";import{r as f}from"./main-7ZV74HAP.js";var t=class r{transform(e){return f(e)}static ɵfac=function(a){return new(a||r)};static ɵpipe=kc({name:`mediaUrl`,type:r,pure:!0})};export{t};

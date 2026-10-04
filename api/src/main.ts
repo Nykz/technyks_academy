@@ -195,7 +195,9 @@ async function bootstrap() {
   app.use(json({
     limit: '16mb',
     verify: (request: Request & { rawBody?: Buffer }, _response, buffer) => {
-      if (request.path === '/api/payments/webhook') request.rawBody = Buffer.from(buffer);
+      if (request.path === '/api/payments/webhook' || request.path === '/api/payments/stripe-webhook') {
+        request.rawBody = Buffer.from(buffer);
+      }
     },
   }));
   app.use(urlencoded({ extended: true, limit: '16mb' }));

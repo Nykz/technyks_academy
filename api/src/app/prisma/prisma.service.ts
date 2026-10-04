@@ -52,6 +52,7 @@ export class PrismaService
       await this.$connect();
       await this.ensureBaseSchema();
       await this.ensureRuntimeColumns();
+      await this.ensureEnumValues();
       await this.ensureCommunicationTables();
       await this.ensureTemplateStoreTables();
       this.isDbConnected = true;
@@ -112,6 +113,22 @@ export class PrismaService
     }
     if (created.size) {
       this.logger.log(`Created missing database tables: ${[...created].join(', ')}`);
+    }
+  }
+
+  /**
+   * Adds new enum values to existing tables (MODIFY keeps current rows).
+   * Safe to run on every start.
+   */
+  private async ensureEnumValues() {
+    try {
+      await this.$executeRawUnsafe(
+        "ALTER TABLE `Payment` MODIFY `provider` ENUM('RAZORPAY', 'LEMON_SQUEEZY', 'STRIPE') NOT NULL",
+      );
+    } catch (error: any) {
+      // Never let this take the database offline; Stripe orders would fail
+      // to save until it succeeds, which the log makes visible.
+      this.logger.warn(`Could not add STRIPE to Payment.provider: ${error?.message || error}`);
     }
   }
 

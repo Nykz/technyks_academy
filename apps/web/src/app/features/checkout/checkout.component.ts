@@ -1,4 +1,4 @@
-import { Component, signal, inject, OnInit, NgZone } from '@angular/core';
+import { Component, computed, signal, inject, OnInit, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -15,6 +15,12 @@ import { TemplatesService } from '../../core/services/templates.service';
 
 import { LocalPriceService } from '../../core/services/local-price.service';
 import { VerifiedPayment, trackGoogleAdsPurchase } from '../../core/utils/google-ads';
+import { ThankYouContext, thankYouNavigation } from '../../core/guards/thank-you.guard';
+import {
+  clearPendingPayment,
+  loadPendingPayment,
+  savePendingPayment,
+} from '../../core/utils/pending-payment';
 
 @Component({
   selector: 'app-checkout',
@@ -99,44 +105,27 @@ import { VerifiedPayment, trackGoogleAdsPurchase } from '../../core/utils/google
           <div class="bg-[#121A2B] technical-border rounded p-6">
             <h3 class="font-['JetBrains_Mono'] text-xs uppercase text-[#3B82F6] font-bold mb-4">PAYMENT METHOD</h3>
             
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <!-- Razorpay Option (India) -->
-              <button
-                type="button"
-                (click)="selectedProvider.set('RAZORPAY')"
-                [class.border-[#3B82F6]]="selectedProvider() === 'RAZORPAY'"
-                [class.bg-[#3B82F6]/5]="selectedProvider() === 'RAZORPAY'"
-                class="p-4 technical-border rounded cursor-pointer transition-all flex flex-col justify-between text-left"
-              >
+            <!-- Gateway chosen by country: Razorpay in India, Stripe abroad -->
+            <div class="mb-6 p-4 technical-border rounded border-[#3B82F6] bg-[#3B82F6]/5 text-left">
+              @if (selectedProvider() === 'STRIPE') {
                 <div class="flex justify-between items-center mb-2">
-                  <span class="font-['Hanken_Grotesk'] text-sm font-bold text-slate-900 dark:text-white">Razorpay (India)</span>
+                  <span class="font-['Hanken_Grotesk'] text-sm font-bold text-slate-900 dark:text-white">Card payment (Stripe)</span>
+                  <span class="font-['JetBrains_Mono'] text-[10px] text-[#3B82F6] font-bold">INTERNATIONAL</span>
+                </div>
+                <p class="font-['Inter'] text-xs text-[#d9c3af]">Visa, Mastercard, Amex, Apple Pay and Google Pay, in {{ prices.chargeCurrency() }}. You'll pay on Stripe's secure page.</p>
+              } @else {
+                <div class="flex justify-between items-center mb-2">
+                  <span class="font-['Hanken_Grotesk'] text-sm font-bold text-slate-900 dark:text-white">Razorpay</span>
                   <span class="font-['JetBrains_Mono'] text-[10px] text-[#3B82F6] font-bold">UPI / CARDS</span>
                 </div>
                 <p class="font-['Inter'] text-xs text-[#d9c3af]">UPI, GPay, PhonePe, cards and netbanking</p>
-              </button>
-
-              <!-- Lemon Squeezy Option (Global) -->
-              <button
-                type="button"
-                [disabled]="true"
-                [class.border-[#3B82F6]]="selectedProvider() === 'LEMON_SQUEEZY'"
-                [class.bg-[#3B82F6]/5]="selectedProvider() === 'LEMON_SQUEEZY'"
-                class="p-4 technical-border rounded cursor-pointer transition-all flex flex-col justify-between text-left"
-              >
-                <div class="flex justify-between items-center mb-2">
-                  <span class="font-['Hanken_Grotesk'] text-sm font-bold text-slate-900 dark:text-white">Lemon Squeezy</span>
-                  <span class="font-['JetBrains_Mono'] text-[10px] text-[#3B82F6] font-bold">GLOBAL / VAT</span>
-                </div>
-                <p class="font-['Inter'] text-xs text-[#d9c3af]">Currently unavailable</p>
-              </button>
+              }
             </div>
 
             <!-- RBI Compliance Note for Razorpay -->
-            @if (selectedProvider() === 'RAZORPAY') {
-              <div class="p-3 bg-[#040810] border border-[#1E293B] rounded text-[11px] font-['JetBrains_Mono'] text-[#d9c3af]">
-                Payment confirmation securely saves your {{ templateMode() ? 'downloads' : 'course' }} to your account.
-              </div>
-            }
+            <div class="p-3 bg-[#040810] border border-[#1E293B] rounded text-[11px] font-['JetBrains_Mono'] text-[#d9c3af]">
+              Payment confirmation securely saves your {{ templateMode() ? 'downloads' : 'course' }} to your account.
+            </div>
           </div>
           }
         </div>
@@ -177,6 +166,7 @@ import { VerifiedPayment, trackGoogleAdsPurchase } from '../../core/utils/google
             }
           </div>
 
+          @if (recoveryMessage()) { <p role="status" class="mb-4 rounded p-3 bg-blue-50 text-blue-900 dark:bg-blue-950 dark:text-blue-100 text-sm">{{ recoveryMessage() }}</p> }
           @if (summaryError() || paymentError()) { <p role="alert" class="mb-4 rounded p-3 bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200 text-sm">{{ summaryError() || paymentError() }}</p> }
           @if (isLoadingSummary()) { <p role="status">Loading your order…</p> }
           <button
@@ -214,7 +204,15 @@ export class CheckoutComponent implements OnInit {
   templateMode = signal(false);
   itemTitle = signal<string>('Technyks Architecture Course');
   originalAmount = signal<number>(0);
-  selectedProvider = signal<'RAZORPAY' | 'LEMON_SQUEEZY'>('RAZORPAY');
+  /** Which gateways the server has keys for (loaded on open). */
+  private gateways = signal<{ razorpay: boolean; stripe: boolean } | null>(null);
+  /** Razorpay in India; Stripe for other currencies when it's configured. */
+  selectedProvider = computed<'RAZORPAY' | 'STRIPE'>(() =>
+    this.prices.chargeCurrency() !== 'INR' && this.gateways()?.stripe ? 'STRIPE' : 'RAZORPAY',
+  );
+  /** Shown while a returning/reloaded payment is being confirmed. */
+  recoveryMessage = signal('');
+  private razorpayScript?: Promise<void>;
 
   couponCode = '';
   couponResult = signal<CouponValidationResult | null>(null);
@@ -228,7 +226,25 @@ export class CheckoutComponent implements OnInit {
   isLoadingSummary = signal(true);
 
   ngOnInit() {
+    if (typeof window !== 'undefined') {
+      this.paymentsService.availability().subscribe({
+        next: (gateways) => this.gateways.set(gateways),
+        error: () => this.gateways.set(null),
+      });
+      // Load Razorpay now so the payment window opens instantly on "Pay".
+      this.loadRazorpayScript().catch(() => undefined);
+    }
     this.route.queryParams.subscribe((params) => {
+      if (params['payment_return']) {
+        this.completeStripeReturn(String(params['payment_return']));
+        return;
+      }
+      if (params['payment_cancelled']) {
+        clearPendingPayment();
+        this.paymentError.set('Payment cancelled. You were not charged.');
+      } else {
+        this.resumePendingPayment();
+      }
       this.clearCoupon();
       this.courseId.set(null);
       this.planSlug.set(null);
@@ -409,9 +425,23 @@ export class CheckoutComponent implements OnInit {
       .subscribe({
         next: (order) => {
           if (order.completed) {
+            // Nothing to pay: the server has already created the enrollment
+            // (100% coupon) or template purchase. Already-owned courses
+            // aren't a new enrollment, so those go to the dashboard.
             this.isProcessing.set(false);
+            if ((order as any).alreadyEnrolled) {
+              this.router.navigate(['/dashboard']);
+              return;
+            }
+            const context = this.thankYouContext();
             if (this.templateMode()) this.cart.clear();
-            this.router.navigate(['/dashboard']);
+            this.router.navigate(['/thank-you'], thankYouNavigation(context));
+            return;
+          }
+          if (order.provider === 'STRIPE' && order.checkoutUrl) {
+            // Remember it, then go to Stripe's secure payment page.
+            savePendingPayment({ paymentId: order.paymentId, provider: 'STRIPE', userId: this.userId() });
+            window.location.assign(order.checkoutUrl);
             return;
           }
           this.openRazorpay(order).catch(() => {
@@ -431,19 +461,107 @@ export class CheckoutComponent implements OnInit {
       });
   }
 
-  private async openRazorpay(order: any) {
-    if (!(window as any).Razorpay) {
-      await new Promise<void>((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        script.onload = () => resolve();
-        script.onerror = () => {
-          script.remove();
-          reject(new Error('Payment script unavailable'));
-        };
-        document.head.appendChild(script);
-      });
+  private userId() {
+    return this.authService.currentUser()?.id || '';
+  }
+
+  /**
+   * A payment the server has confirmed (enrollment created): report it to
+   * Google Ads once, then show the thank-you page.
+   */
+  private finishVerifiedPayment(payment: any, fallback: ThankYouContext) {
+    clearPendingPayment();
+    this.isProcessing.set(false);
+    this.recoveryMessage.set('');
+    trackGoogleAdsPurchase(payment);
+    const productIds = this.templateIdsFrom(payment?.templateProductIds);
+    const context: ThankYouContext = payment?.courseId
+      ? { kind: 'course', courseId: payment.courseId }
+      : productIds.length
+        ? { kind: 'templates', productIds }
+        : fallback;
+    if (context.kind === 'templates') this.cart.clear();
+    this.router.navigate(['/thank-you'], thankYouNavigation(context));
+  }
+
+  private templateIdsFrom(value: unknown): string[] {
+    if (Array.isArray(value)) return value.map(String);
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value) : [];
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
     }
+  }
+
+  /** Back from Stripe: the server confirms with Stripe (retrying briefly). */
+  private completeStripeReturn(paymentId: string, attempt = 0) {
+    this.isProcessing.set(true);
+    this.isLoadingSummary.set(false);
+    this.recoveryMessage.set('Confirming your payment with Stripe…');
+    this.paymentsService.verifyStripe(paymentId).subscribe({
+      next: (payment) => this.finishVerifiedPayment(payment, { kind: 'course', courseId: '' }),
+      error: () => {
+        if (attempt < 4) {
+          setTimeout(() => this.completeStripeReturn(paymentId, attempt + 1), 2000);
+          return;
+        }
+        this.isProcessing.set(false);
+        this.recoveryMessage.set(
+          'Your payment is still being confirmed by Stripe. Do not pay again: your purchase unlocks automatically once it is confirmed. Refresh this page in a minute.',
+        );
+      },
+    });
+  }
+
+  /** After a reload / closed tab mid-payment, ask the server to re-check it. */
+  private resumePendingPayment() {
+    const pending = loadPendingPayment(this.userId());
+    if (!pending) return;
+    this.paymentsService.reconcile(pending.paymentId).subscribe({
+      next: (result) => {
+        if (result.status === 'SUCCESS' && result.payment) {
+          this.finishVerifiedPayment(result.payment, { kind: 'course', courseId: '' });
+        } else if (result.status === 'PENDING') {
+          this.recoveryMessage.set(
+            'Your previous payment is still being confirmed. If money was deducted, do not pay again: your purchase unlocks automatically once it is confirmed.',
+          );
+        } else {
+          clearPendingPayment(); // Never paid, expired or failed.
+        }
+      },
+      error: () => undefined, // Keep it; the gateway webhook can still confirm it.
+    });
+  }
+
+  /** What was bought, for the /thank-you guard (read before the cart is cleared). */
+  private thankYouContext(): ThankYouContext {
+    return this.templateMode()
+      ? { kind: 'templates', productIds: this.cart.items().map((item) => item.id) }
+      : { kind: 'course', courseId: this.courseId() ?? '' };
+  }
+
+  /** Loads Razorpay's checkout script once (started when checkout opens). */
+  private loadRazorpayScript(): Promise<void> {
+    if ((window as any).Razorpay) return Promise.resolve();
+    this.razorpayScript ??= new Promise<void>((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => {
+        script.remove();
+        this.razorpayScript = undefined; // Allow a retry on "Pay".
+        reject(new Error('Payment script unavailable'));
+      };
+      document.head.appendChild(script);
+    });
+    return this.razorpayScript;
+  }
+
+  private async openRazorpay(order: any) {
+    await this.loadRazorpayScript();
+    const fallbackContext = this.thankYouContext();
     const checkout = new (window as any).Razorpay({
       key: order.razorpayKeyId,
       order_id: order.razorpayOrderId,
@@ -465,14 +583,9 @@ export class CheckoutComponent implements OnInit {
               razorpaySignature: result.razorpay_signature,
             })
             .subscribe({
-              next: (payment: VerifiedPayment) => {
-                this.isProcessing.set(false);
-                // The backend has verified the payment, marked it SUCCESS
-                // and created the enrollment. Report it once, in INR.
-                trackGoogleAdsPurchase(payment);
-                if (this.templateMode()) this.cart.clear();
-                this.router.navigate(['/thank-you']);
-              },
+              // The backend has verified the payment, marked it SUCCESS and
+              // created the enrollment: report it once (INR), then thank-you.
+              next: (payment: VerifiedPayment) => this.finishVerifiedPayment(payment, fallbackContext),
               error: () => {
                 this.isProcessing.set(false);
                 this.paymentError.set(
@@ -484,6 +597,7 @@ export class CheckoutComponent implements OnInit {
       modal: {
         ondismiss: () =>
           this.zone.run(() => {
+            clearPendingPayment();
             this.isProcessing.set(false);
             this.paymentError.set(
               'Payment window closed. No enrollment was confirmed.',
@@ -494,12 +608,15 @@ export class CheckoutComponent implements OnInit {
     });
     checkout.on('payment.failed', () =>
       this.zone.run(() => {
+        clearPendingPayment();
         this.isProcessing.set(false);
         this.paymentError.set(
           'Payment failed. Please check your payment method and try again.',
         );
       }),
     );
+    // Remembered so a reload mid-payment can be re-checked with Razorpay.
+    savePendingPayment({ paymentId: order.paymentId, provider: 'RAZORPAY', userId: this.userId() });
     checkout.open();
   }
 }

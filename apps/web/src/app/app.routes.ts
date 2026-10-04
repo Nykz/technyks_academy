@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { thankYouGuard } from './core/guards/thank-you.guard';
 import {
   authGuard,
   adminGuard,
@@ -69,6 +70,7 @@ export const appRoutes: Routes = [
   },
   {
     path: 'thank-you',
+    canActivate: [thankYouGuard],
     loadComponent: () =>
       import('./features/thank-you/thank-you.component').then(
         (m) => m.ThankYouComponent,

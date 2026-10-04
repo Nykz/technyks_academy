@@ -7,6 +7,7 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { CoursesService, Course, activeSalePrice, salePercentOff } from '../../core/services/courses.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Certificate, EnrollmentsService } from '../../core/services/enrollments.service';
+import { thankYouNavigation } from '../../core/guards/thank-you.guard';
 import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 
 import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
@@ -907,6 +908,10 @@ export class CourseDetailComponent implements OnInit {
         this.isEnrolled.set(true);
         this.isEnrolling.set(false);
         this.enrollmentMessage.set('You are enrolled. Your lessons are ready.');
+        this.router.navigate(
+          ['/thank-you'],
+          thankYouNavigation({ kind: 'course', courseId: course.id }),
+        );
       },
       error: (error) => {
         this.isEnrolling.set(false);
