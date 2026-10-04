@@ -17,7 +17,11 @@ const KEYS = {
 function setup(extra: Record<string, string> = {}) {
   const prisma: any = {
     isDbConnected: false,
-    inMemoryCourses: [{ id: 'course-1', title: 'Angular Course', price: 999, isFree: false, isPublished: true, currency: 'INR' }],
+    inMemoryCourses: [
+      { id: 'course-1', title: 'Angular Course', price: 999, isFree: false, isPublished: true, currency: 'INR' },
+      { id: 'tiny', title: 'Tiny Price Course', price: 1, isFree: false, isPublished: true, currency: 'INR' },
+      { id: 'half-rupee', title: 'Half Rupee Course', price: 0.5, isFree: false, isPublished: true, currency: 'INR' },
+    ],
     inMemoryEnrollments: [],
     inMemoryPayments: [],
     inMemoryUiTemplatePurchases: [],
@@ -73,6 +77,7 @@ describe('Stripe checkout', () => {
     expect(body).toContain('line_items[0][price_data][currency]=usd');
     expect(body).toContain('line_items[0][price_data][unit_amount]=1199');
     expect(body).toContain(`client_reference_id=${order.paymentId}`);
+    expect(body).toContain('billing_address_collection=required');
     expect(body).toContain(`success_url=https://technyks.com/checkout?payment_return=${order.paymentId}`);
     expect(prisma.inMemoryPayments[0]).toMatchObject({
       id: order.paymentId, provider: 'STRIPE', status: 'PENDING', paymentIntentId: 'cs_test_1',
@@ -159,5 +164,31 @@ describe('payment recovery after a reload or closed tab', () => {
   it('reports availability of each gateway from the server keys', () => {
     expect(setup().service.getCheckoutAvailability()).toMatchObject({ razorpay: true, stripe: true });
     expect(setup({ STRIPE_SECRET_KEY: '' }).service.getCheckoutAvailability()).toMatchObject({ stripe: false });
+  });
+});
+
+describe('gateway minimum amounts', () => {
+  it('refuses a Stripe total below US$0.50 with a clear message, without calling Stripe', async () => {
+    const { service, prisma } = setup();
+    const calls = fakeFetch({});
+    await expect(service.createCheckoutOrder({ userId: 'u1', courseId: 'tiny', provider: 'STRIPE', currency: 'USD' }))
+      .rejects.toThrow('Card payments must be at least $0.50');
+    expect(calls).toHaveLength(0);
+    expect(prisma.inMemoryPayments).toHaveLength(0);
+  });
+
+  it('refuses a Razorpay total below ₹1', async () => {
+    const { service } = setup();
+    const calls = fakeFetch({});
+    await expect(service.createCheckoutOrder({ userId: 'u1', courseId: 'half-rupee', provider: 'RAZORPAY', currency: 'INR' }))
+      .rejects.toThrow('minimum ₹1');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('lets normal totals through', async () => {
+    const { service } = setup();
+    fakeFetch({ 'https://api.razorpay.com/v1/orders': () => ({ id: 'order_ok' }) });
+    await expect(service.createCheckoutOrder({ userId: 'u1', courseId: 'course-1', provider: 'RAZORPAY', currency: 'INR' }))
+      .resolves.toMatchObject({ provider: 'RAZORPAY', razorpayOrderId: 'order_ok' });
   });
 });

@@ -232,6 +232,7 @@ export class PaymentsService implements OnModuleInit {
   }) {
     if (p.provider === 'LEMON_SQUEEZY') throw new BadRequestException('This payment method is not available. Please choose another.');
     const charge = p.fixedCharge ?? (await this.quoteInCurrency(Number(p.amountInr), p.requestedCurrency));
+    await this.assertAboveGatewayMinimum(p.provider === 'STRIPE' ? 'STRIPE' : 'RAZORPAY', charge);
     const paymentId = crypto.randomUUID();
     const base = {
       id: paymentId, userId: p.userId, amount: charge.amount, currency: charge.currency, amountInr: p.amountInr,
@@ -245,6 +246,9 @@ export class PaymentsService implements OnModuleInit {
       const session = await this.stripeRequest('checkout/sessions', {
         mode: 'payment',
         client_reference_id: paymentId,
+        // Indian Stripe accounts must collect the buyer's name and billing
+        // address for international (export) card payments.
+        billing_address_collection: 'required',
         success_url: `${this.webAppUrl}/checkout?payment_return=${paymentId}`,
         cancel_url: `${this.webAppUrl}/checkout?${returnTo}&payment_cancelled=${paymentId}`,
         metadata: { payment_id: paymentId },
@@ -266,6 +270,35 @@ export class PaymentsService implements OnModuleInit {
     return { provider: 'RAZORPAY', paymentId, razorpayOrderId: order.id,
       razorpayKeyId: this.config.get<string>('RAZORPAY_KEY_ID'), amount: charge.minor, displayAmount: charge.amount,
       currency: charge.currency, title: p.title };
+  }
+
+  /**
+   * Gateways refuse very small charges (Stripe: about US$0.50 in any
+   * currency; Razorpay: ₹1). Check first so the buyer gets a clear message
+   * instead of a generic gateway error, e.g. after a big coupon.
+   */
+  private async assertAboveGatewayMinimum(provider: 'STRIPE' | 'RAZORPAY', charge: { currency: string; amount: number }) {
+    const format = (amount: number, currency: string) =>
+      new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', { style: 'currency', currency }).format(amount);
+    if (provider === 'RAZORPAY') {
+      const rate = charge.currency === 'INR' ? 1 : await this.fx?.rateFor(charge.currency);
+      if (rate && charge.amount / rate < 1) {
+        throw new BadRequestException(
+          `The total is too small to pay online (minimum ${format(1, 'INR')}). Use a smaller coupon, or a 100% coupon to enroll for free.`,
+        );
+      }
+      return;
+    }
+    const usdPerInr = await this.fx?.rateFor('USD');
+    const currencyPerInr = charge.currency === 'INR' ? 1 : await this.fx?.rateFor(charge.currency);
+    if (!usdPerInr || !currencyPerInr) return; // Can't check; Stripe will decide.
+    const usd = (charge.amount / currencyPerInr) * usdPerInr;
+    if (usd < 0.5) {
+      const minimum = Math.ceil((0.5 / usdPerInr) * currencyPerInr * 100) / 100;
+      throw new BadRequestException(
+        `Card payments must be at least ${format(minimum, charge.currency)}. Use a smaller coupon, or a 100% coupon to enroll for free.`,
+      );
+    }
   }
 
   private async savePayment(data: Record<string, any>) {
