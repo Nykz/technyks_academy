@@ -9,7 +9,8 @@ import {
 } from '../../core/services/payments.service';
 import { AuthService } from '../../core/services/auth.service';
 import { EnrollmentsService } from '../../core/services/enrollments.service';
-import { CoursesService, payablePrice } from '../../core/services/courses.service';
+import { Course, CoursesService, payablePrice } from '../../core/services/courses.service';
+import { MediaUrlPipe } from '../../core/pipes/media-url.pipe';
 import { TemplateCartService } from '../../core/services/template-cart.service';
 import { TemplatesService } from '../../core/services/templates.service';
 
@@ -25,165 +26,256 @@ import {
 @Component({
   selector: 'app-checkout',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, MediaUrlPipe],
   template: `
-    <div class="px-6 md:px-16 pt-24 pb-20 max-w-5xl mx-auto">
-      <div class="mb-8">
-        <span class="font-['JetBrains_Mono'] text-xs uppercase text-[#3B82F6] tracking-widest font-semibold">SECURE CHECKOUT</span>
-        <h1 class="font-['Hanken_Grotesk'] text-3xl font-bold text-slate-950 dark:text-white mt-1">{{ templateMode() ? 'Complete Your Purchase' : 'Complete Your Enrollment' }}</h1>
+    <div class="mx-auto max-w-6xl px-4 pb-32 pt-8 sm:px-6 sm:pt-10 lg:pb-16">
+      <!-- Header -->
+      <a
+        [routerLink]="backLink()"
+        class="inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-[#2563EB] dark:text-slate-300 dark:hover:text-[#60A5FA]"
+      >
+        <span class="material-symbols-outlined text-lg" aria-hidden="true">arrow_back</span>
+        {{ templateMode() ? 'Back to cart' : 'Back to course' }}
+      </a>
+      <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <h1 class="font-['Hanken_Grotesk'] text-3xl font-bold text-slate-950 dark:text-white sm:text-4xl">Checkout</h1>
+        <p class="inline-flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
+          <span class="material-symbols-outlined text-lg !text-emerald-600" aria-hidden="true">lock</span>
+          Secure, encrypted checkout
+        </p>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Main Form Column -->
-        <div class="lg:col-span-2 flex flex-col gap-6">
-          <!-- Item Summary Card -->
-          <div class="bg-[#121A2B] technical-border rounded p-6">
-            <h2 class="font-['Hanken_Grotesk'] text-lg font-bold text-slate-950 dark:text-white mb-2">Order Summary</h2>
-            @if (templateMode()) {
-              @for (item of cart.items(); track item.id) {
-                <div class="flex justify-between items-center py-3 border-b border-[#1E293B]">
-                  <div><div class="font-['Hanken_Grotesk'] font-bold text-slate-950 dark:text-white text-base">{{ item.title }}</div><div class="font-['JetBrains_Mono'] text-xs text-slate-600 dark:text-[#d9c3af]">Source ZIP · Permanent dashboard download</div></div>
-                  <div class="font-['JetBrains_Mono'] text-lg font-bold text-slate-950 dark:text-white">{{ prices.formatCharge(item.price) }}</div>
+      <div class="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
+        <!-- Left: what you are buying -->
+        <div class="flex min-w-0 flex-col gap-6">
+          <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#121A2B] sm:p-6" aria-labelledby="order-heading">
+            <h2 id="order-heading" class="font-['Hanken_Grotesk'] text-lg font-bold text-slate-950 dark:text-white">Order details</h2>
+
+            @if (isLoadingSummary()) {
+              <div class="mt-4 flex animate-pulse flex-col gap-4 sm:flex-row">
+                <div class="aspect-video w-full rounded-lg bg-slate-200 dark:bg-white/10 sm:w-56"></div>
+                <div class="flex-1 space-y-3 py-1">
+                  <div class="h-5 w-3/4 rounded bg-slate-200 dark:bg-white/10"></div>
+                  <div class="h-4 w-1/2 rounded bg-slate-200 dark:bg-white/10"></div>
+                  <div class="h-4 w-2/3 rounded bg-slate-200 dark:bg-white/10"></div>
                 </div>
-              }
+              </div>
+            } @else if (templateMode()) {
+              <ul class="mt-4 divide-y divide-slate-200 dark:divide-white/10">
+                @for (item of cart.items(); track item.id) {
+                  <li class="flex gap-4 py-4 first:pt-0 last:pb-0">
+                    <div class="aspect-[59/30] w-28 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 dark:border-white/10 dark:bg-[#0B1220] sm:w-40">
+                      @if (item.thumbnail) {
+                        <img [src]="item.thumbnail | mediaUrl" [alt]="item.title" class="h-full w-full object-cover object-top" />
+                      }
+                    </div>
+                    <div class="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                      <div class="min-w-0">
+                        <p class="line-clamp-2 font-bold leading-snug text-slate-950 dark:text-white">{{ item.title }}</p>
+                        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ item.category }} · Source code ZIP · Lifetime download</p>
+                      </div>
+                      <p class="shrink-0 font-bold text-slate-950 dark:text-white">{{ prices.formatCharge(item.price) }}</p>
+                    </div>
+                  </li>
+                }
+              </ul>
+            } @else if (course(); as c) {
+              <div class="mt-4 flex flex-col gap-4 sm:flex-row">
+                <div class="relative aspect-video w-full shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-900 dark:border-white/10 sm:w-56">
+                  <img [src]="(c.thumbnail | mediaUrl) || '/assets/course-agentic-ai.png'" [alt]="c.title" class="h-full w-full object-cover" />
+                </div>
+                <div class="flex min-w-0 flex-1 flex-col">
+                  <div class="flex items-start justify-between gap-4">
+                    <p class="font-['Hanken_Grotesk'] text-lg font-bold leading-snug text-slate-950 dark:text-white">{{ c.title }}</p>
+                    <p class="hidden shrink-0 text-lg font-bold text-slate-950 dark:text-white sm:block">{{ prices.formatCharge(originalAmount()) }}</p>
+                  </div>
+                  @if (c.subtitle) {
+                    <p class="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{{ c.subtitle }}</p>
+                  }
+                  <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">By Technyks Academy</p>
+                  <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                    <span class="inline-flex items-center gap-1"><span class="material-symbols-outlined text-base text-[#2563EB] dark:text-[#60A5FA]" aria-hidden="true">signal_cellular_alt</span>{{ c.level }}</span>
+                    <span class="inline-flex items-center gap-1"><span class="material-symbols-outlined text-base text-[#2563EB] dark:text-[#60A5FA]" aria-hidden="true">play_lesson</span>{{ lessonCount() }} lessons</span>
+                    @if (courseLength()) {
+                      <span class="inline-flex items-center gap-1"><span class="material-symbols-outlined text-base text-[#2563EB] dark:text-[#60A5FA]" aria-hidden="true">schedule</span>{{ courseLength() }}</span>
+                    }
+                    <span class="inline-flex items-center gap-1"><span class="material-symbols-outlined text-base text-[#2563EB] dark:text-[#60A5FA]" aria-hidden="true">workspace_premium</span>Certificate</span>
+                  </div>
+                  <p class="mt-3 text-lg font-bold text-slate-950 dark:text-white sm:hidden">{{ prices.formatCharge(originalAmount()) }}</p>
+                </div>
+              </div>
             } @else {
-            <div class="flex justify-between items-center py-3 border-b border-[#1E293B]">
-              <div>
-                <div class="font-['Hanken_Grotesk'] font-bold text-white text-base">{{ itemTitle() }}</div>
-                <div class="font-['JetBrains_Mono'] text-xs text-[#d9c3af]">Lifetime Access & Source Code</div>
-              </div>
-              <div class="font-['JetBrains_Mono'] text-lg font-bold text-white">
-                {{ prices.formatCharge(originalAmount()) }}
-              </div>
-            </div>
-            }
-          </div>
-
-          <!-- Coupon Code Input -->
-          @if (canUseCoupon()) {
-          <div class="bg-[#121A2B] technical-border rounded p-6">
-            <h3 class="font-['JetBrains_Mono'] text-xs uppercase text-[#3B82F6] font-bold mb-4">COUPON CODE</h3>
-            <div class="flex gap-3">
-              <input
-                type="text"
-                [(ngModel)]="couponCode"
-                (ngModelChange)="clearCoupon()"
-                placeholder="Enter code (e.g. TECHNYKS50)"
-                class="min-w-0 flex-grow rounded border border-slate-300 bg-white px-4 py-2.5 font-['JetBrains_Mono'] text-xs uppercase text-slate-900 caret-slate-900 placeholder:text-slate-400 focus:border-[#2563EB] focus:outline-none dark:border-[#1E293B] dark:bg-[#040810] dark:text-white dark:caret-white dark:placeholder:text-slate-500 dark:focus:border-[#3B82F6]"
-              />
-              <button
-                (click)="applyCoupon()"
-                [disabled]="isApplyingCoupon()"
-                class="shrink-0 font-['JetBrains_Mono'] text-xs font-bold uppercase text-[#040810] bg-[#3B82F6] px-4 sm:px-5 py-2.5 rounded hover:bg-[#3B82F6]/90 transition-colors"
-              >
-                Apply
-              </button>
-            </div>
-
-            @if (couponSuccess()) {
-              <div class="mt-3 text-xs font-['JetBrains_Mono'] text-[#3B82F6] flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-sm">check_circle</span>
-                Coupon {{ couponResult()?.code }} applied! Discount: {{ discountText() }}
-              </div>
+              <p class="mt-4 font-bold text-slate-950 dark:text-white">{{ itemTitle() }}</p>
             }
 
-            @if (couponError()) {
-              <div class="mt-3 text-xs font-['JetBrains_Mono'] text-[#ffb4ab] flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-sm">error</span>
-                {{ couponError() }}
-              </div>
+            <!-- What's included -->
+            @if (!isLoadingSummary() && !summaryError()) {
+              <ul class="mt-6 grid gap-2 border-t border-slate-200 pt-5 text-sm text-slate-700 dark:border-white/10 dark:text-slate-300 sm:grid-cols-2">
+                @for (line of includes(); track line) {
+                  <li class="flex items-start gap-2">
+                    <span class="material-symbols-outlined text-lg !text-emerald-600" aria-hidden="true">check_circle</span>{{ line }}
+                  </li>
+                }
+              </ul>
             }
-          </div>
-          } @else if (templateMode() && cart.items().length > 1) {
-          <div class="bg-[#121A2B] technical-border rounded p-6">
-            <p class="font-['JetBrains_Mono'] text-[11px] text-[#a18d7b]">Coupons can only be applied when checking out a single UI template. Remove the other items from your cart to use a coupon.</p>
-          </div>
-          }
+          </section>
 
-          @if (finalAmount() > 0) {
-          <!-- Payment Provider Options -->
-          <div class="bg-[#121A2B] technical-border rounded p-6">
-            <h3 class="font-['JetBrains_Mono'] text-xs uppercase text-[#3B82F6] font-bold mb-4">PAYMENT METHOD</h3>
-            
-            <!-- Gateway chosen by country: Razorpay in India, Stripe abroad -->
-            <div class="mb-6 p-4 technical-border rounded border-[#3B82F6] bg-[#3B82F6]/5 text-left">
-              @if (selectedProvider() === 'STRIPE') {
-                <div class="flex justify-between items-center mb-2">
-                  <span class="font-['Hanken_Grotesk'] text-sm font-bold text-slate-900 dark:text-white">Card payment (Stripe)</span>
-                  <span class="font-['JetBrains_Mono'] text-[10px] text-[#3B82F6] font-bold">INTERNATIONAL</span>
+          @if (finalAmount() > 0 && !isLoadingSummary() && !summaryError()) {
+            <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#121A2B] sm:p-6" aria-labelledby="method-heading">
+              <h2 id="method-heading" class="font-['Hanken_Grotesk'] text-lg font-bold text-slate-950 dark:text-white">Payment method</h2>
+              <div class="mt-4 flex items-start gap-3 rounded-lg border-2 border-[#2563EB] bg-blue-50/60 p-4 dark:border-[#3B82F6] dark:bg-[#3B82F6]/10">
+                <span class="material-symbols-outlined mt-0.5 text-2xl text-[#2563EB] dark:text-[#60A5FA]" aria-hidden="true">{{ selectedProvider() === 'STRIPE' ? 'credit_card' : 'account_balance_wallet' }}</span>
+                <div class="min-w-0">
+                  @if (selectedProvider() === 'STRIPE') {
+                    <p class="font-bold text-slate-950 dark:text-white">Card payment (Stripe)</p>
+                    <p class="mt-0.5 text-sm text-slate-600 dark:text-slate-300">Visa, Mastercard, Amex, Apple Pay and Google Pay, in {{ prices.chargeCurrency() }}. You'll pay on Stripe's secure page.</p>
+                  } @else {
+                    <p class="font-bold text-slate-950 dark:text-white">Razorpay</p>
+                    <p class="mt-0.5 text-sm text-slate-600 dark:text-slate-300">UPI, GPay, PhonePe, cards and netbanking</p>
+                  }
                 </div>
-                <p class="font-['Inter'] text-xs text-[#d9c3af]">Visa, Mastercard, Amex, Apple Pay and Google Pay, in {{ prices.chargeCurrency() }}. You'll pay on Stripe's secure page.</p>
-              } @else {
-                <div class="flex justify-between items-center mb-2">
-                  <span class="font-['Hanken_Grotesk'] text-sm font-bold text-slate-900 dark:text-white">Razorpay</span>
-                  <span class="font-['JetBrains_Mono'] text-[10px] text-[#3B82F6] font-bold">UPI / CARDS</span>
-                </div>
-                <p class="font-['Inter'] text-xs text-[#d9c3af]">UPI, GPay, PhonePe, cards and netbanking</p>
-              }
-            </div>
-
-            <!-- RBI Compliance Note for Razorpay -->
-            <div class="p-3 bg-[#040810] border border-[#1E293B] rounded text-[11px] font-['JetBrains_Mono'] text-[#d9c3af]">
-              Payment confirmation securely saves your {{ templateMode() ? 'downloads' : 'course' }} to your account.
-            </div>
-          </div>
+              </div>
+              <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                Your {{ templateMode() ? 'downloads are' : 'course is' }} added to your account as soon as the payment is confirmed.
+              </p>
+            </section>
           }
         </div>
 
-        <!-- Order Summary Sidebar -->
-        <div class="bg-[#121A2B] technical-border rounded p-6 flex flex-col justify-between h-fit shadow-2xl">
-          <div>
-            <h3 class="font-['Hanken_Grotesk'] text-lg font-bold text-white mb-4">Payment Breakdown</h3>
+        <!-- Right: summary and purchase button -->
+        <aside class="h-fit lg:sticky lg:top-24" aria-labelledby="summary-heading">
+          <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-lg dark:border-white/10 dark:bg-[#121A2B] sm:p-6">
+            <h2 id="summary-heading" class="font-['Hanken_Grotesk'] text-lg font-bold text-slate-950 dark:text-white">Summary</h2>
 
-            <div class="flex flex-col gap-3 font-['JetBrains_Mono'] text-xs text-[#d9c3af] border-b border-[#1E293B] pb-4 mb-4">
-              <div class="flex justify-between">
-                <span>Subtotal:</span>
-                <span>{{ prices.formatCharge(originalAmount()) }}</span>
+            <!-- Coupon -->
+            @if (canUseCoupon()) {
+              <div class="mt-4">
+                <label for="coupon" class="text-xs font-semibold text-slate-600 dark:text-slate-300">Coupon code</label>
+                <div class="mt-1.5 flex gap-2">
+                  <input
+                    id="coupon"
+                    type="text"
+                    [(ngModel)]="couponCode"
+                    (ngModelChange)="clearCoupon()"
+                    (keydown.enter)="applyCoupon()"
+                    placeholder="Enter code"
+                    class="min-w-0 flex-grow rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm uppercase text-slate-900 placeholder:normal-case placeholder:text-slate-400 focus:border-[#2563EB] focus:outline-none dark:border-white/15 dark:bg-[#040810] dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    (click)="applyCoupon()"
+                    [disabled]="isApplyingCoupon() || !couponCode.trim()"
+                    class="shrink-0 rounded-lg border border-[#2563EB] px-4 text-sm font-bold text-[#2563EB] hover:bg-blue-50 disabled:opacity-50 dark:border-[#3B82F6] dark:text-[#60A5FA] dark:hover:bg-[#3B82F6]/10"
+                  >
+                    {{ isApplyingCoupon() ? '…' : 'Apply' }}
+                  </button>
+                </div>
+                @if (couponSuccess()) {
+                  <p class="mt-2 flex items-center gap-1 text-xs font-semibold !text-emerald-700 dark:!text-emerald-400">
+                    <span class="material-symbols-outlined text-sm" aria-hidden="true">check_circle</span>
+                    {{ couponResult()?.code }} applied: you save {{ discountText() }}
+                  </p>
+                }
+                @if (couponError()) {
+                  <p class="mt-2 flex items-center gap-1 text-xs font-semibold !text-rose-600" role="alert">
+                    <span class="material-symbols-outlined text-sm" aria-hidden="true">error</span>{{ couponError() }}
+                  </p>
+                }
               </div>
+            } @else if (templateMode() && cart.items().length > 1) {
+              <p class="mt-4 text-xs text-slate-500 dark:text-slate-400">Coupons apply when checking out a single UI template.</p>
+            }
 
+            <!-- Breakdown -->
+            <dl class="mt-5 space-y-2.5 border-t border-slate-200 pt-5 text-sm dark:border-white/10">
+              <div class="flex justify-between text-slate-600 dark:text-slate-300">
+                <dt>{{ templateMode() && cart.items().length > 1 ? 'Subtotal (' + cart.items().length + ' items)' : 'Price' }}</dt>
+                <dd>{{ prices.formatCharge(originalAmount()) }}</dd>
+              </div>
               @if (couponResult() && couponResult()?.calculatedDiscount! > 0) {
-                <div class="flex justify-between text-[#3B82F6]">
-                  <span>Discount ({{ couponResult()?.code }}):</span>
-                  <span>-{{ discountText() }}</span>
+                <div class="flex justify-between !text-emerald-700 dark:!text-emerald-400">
+                  <dt>Discount ({{ couponResult()?.code }})</dt>
+                  <dd>−{{ discountText() }}</dd>
                 </div>
               }
-
-              <div class="flex justify-between text-[#a18d7b]">
-                <span>Taxes & GST (Included):</span>
-                <span>{{ prices.formatCharge(0) }}</span>
+              <div class="flex justify-between text-slate-500 dark:text-slate-400">
+                <dt>Taxes</dt>
+                <dd>Included</dd>
               </div>
-            </div>
-
-            <div class="flex justify-between items-baseline mb-6 font-['JetBrains_Mono']">
-              <span class="text-xs uppercase text-[#a18d7b]">Total Payable:</span>
-              <span class="text-2xl font-bold text-[#3B82F6]">{{ prices.formatCharge(finalAmount()) }}</span>
-            </div>
+              <div class="flex items-baseline justify-between border-t border-slate-200 pt-3 dark:border-white/10">
+                <dt class="font-bold text-slate-950 dark:text-white">Total</dt>
+                <dd class="text-2xl font-bold text-slate-950 dark:text-white">{{ prices.formatCharge(finalAmount()) }}</dd>
+              </div>
+            </dl>
             @if (finalAmount() > 0 && prices.chargeCurrency() !== prices.currency()) {
-              <p class="-mt-4 mb-6 text-xs text-slate-500 dark:text-[#a18d7b]">
-                Shown as about {{ prices.format(finalAmount()) }}. You'll be charged
-                {{ prices.formatCharge(finalAmount()) }} ({{ prices.chargeCurrency() }}); your bank converts it.
+              <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Shown as about {{ prices.format(finalAmount()) }}. You'll be charged {{ prices.formatCharge(finalAmount()) }}
+                ({{ prices.chargeCurrency() }}); your bank converts it.
               </p>
             }
-          </div>
 
-          @if (recoveryMessage()) { <p role="status" class="mb-4 rounded p-3 bg-blue-50 text-blue-900 dark:bg-blue-950 dark:text-blue-100 text-sm">{{ recoveryMessage() }}</p> }
-          @if (summaryError() || paymentError()) { <p role="alert" class="mb-4 rounded p-3 bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200 text-sm">{{ summaryError() || paymentError() }}</p> }
-          @if (isLoadingSummary()) { <p role="status">Loading your order…</p> }
+            <!-- Messages -->
+            @if (recoveryMessage()) {
+              <p role="status" class="mt-4 rounded-lg !bg-blue-50 p-3 text-sm !text-blue-900">{{ recoveryMessage() }}</p>
+            }
+            @if (summaryError() || paymentError()) {
+              <p role="alert" class="mt-4 rounded-lg !bg-rose-50 p-3 text-sm !text-rose-800">{{ summaryError() || paymentError() }}</p>
+            }
+
+            <!-- Purchase button -->
+            <button
+              type="button"
+              (click)="onProceedToPayment()"
+              [disabled]="isProcessing() || isLoadingSummary() || !!summaryError()"
+              class="mt-5 flex w-full items-center justify-center gap-2 rounded-lg !bg-[#2563EB] px-6 py-4 text-base font-bold !text-white shadow-md transition-colors hover:!bg-[#1D4ED8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563EB] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              @if (isProcessing()) {
+                <span class="material-symbols-outlined animate-spin text-xl" aria-hidden="true">progress_activity</span>
+                Processing…
+              } @else {
+                <span class="material-symbols-outlined text-xl" aria-hidden="true">lock</span>
+                {{ buttonLabel() }}
+              }
+            </button>
+
+            <p class="mt-3 flex items-center justify-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <span class="material-symbols-outlined text-sm" aria-hidden="true">verified_user</span>
+              {{ finalAmount() > 0 ? 'Payments secured by ' + (selectedProvider() === 'STRIPE' ? 'Stripe' : 'Razorpay') : 'No payment needed' }}
+            </p>
+            <p class="mt-3 text-center text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+              By completing your purchase you agree to our
+              <a routerLink="/terms-and-conditions" class="underline hover:text-[#2563EB]">Terms</a> and
+              <a routerLink="/refund-policy" class="underline hover:text-[#2563EB]">Refund Policy</a>.
+            </p>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Phones: total and purchase button always in reach -->
+    @if (!isLoadingSummary() && !summaryError()) {
+      <div class="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur dark:border-white/10 dark:bg-[#0b1220]/95 lg:hidden">
+        <div class="mx-auto flex max-w-6xl items-center gap-3">
+          <div class="min-w-0">
+            <p class="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Total</p>
+            <p class="truncate text-lg font-bold text-slate-950 dark:text-white">{{ prices.formatCharge(finalAmount()) }}</p>
+          </div>
           <button
+            type="button"
             (click)="onProceedToPayment()"
             [disabled]="isProcessing() || isLoadingSummary() || !!summaryError()"
-            class="w-full font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-[#040810] bg-[#3B82F6] py-4 rounded font-bold hover:bg-[#3B82F6]/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg"
+            class="ml-auto flex items-center justify-center gap-1.5 rounded-lg !bg-[#2563EB] px-5 py-3 text-sm font-bold !text-white hover:!bg-[#1D4ED8] disabled:opacity-60"
           >
             @if (isProcessing()) {
-              <span class="material-symbols-outlined animate-spin text-sm">progress_activity</span> Processing Order...
+              <span class="material-symbols-outlined animate-spin text-lg" aria-hidden="true">progress_activity</span> Processing…
             } @else {
-              <span>{{ finalAmount() === 0 ? (templateMode() ? 'Get downloads' : 'Enroll for free') : 'Pay ' + prices.formatCharge(finalAmount()) }}</span>
-              <span class="material-symbols-outlined text-sm">lock</span>
+              <span class="material-symbols-outlined text-lg" aria-hidden="true">lock</span>
+              {{ finalAmount() > 0 ? 'Complete purchase' : buttonLabel() }}
             }
           </button>
         </div>
       </div>
-    </div>
+    }
   `,
 })
 export class CheckoutComponent implements OnInit {
@@ -203,6 +295,35 @@ export class CheckoutComponent implements OnInit {
   planSlug = signal<string | null>(null);
   templateMode = signal(false);
   itemTitle = signal<string>('Technyks Architecture Course');
+  /** The course being bought, for the order card. */
+  course = signal<Course | null>(null);
+
+  readonly lessonCount = computed(() =>
+    (this.course()?.modules || []).reduce((total, module) => total + (module.lessons?.length || 0), 0),
+  );
+  readonly courseLength = computed(() => {
+    const seconds = (this.course()?.modules || []).reduce(
+      (total, module) => total + (module.lessons || []).reduce((sum, lesson) => sum + (Number(lesson.duration) || 0), 0),
+      0,
+    );
+    const minutes = Math.round(seconds / 60);
+    if (!minutes) return '';
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+  });
+  readonly backLink = computed(() =>
+    this.templateMode() ? ['/cart'] : this.course() ? ['/courses', this.course()!.slug] : ['/courses'],
+  );
+  readonly includes = computed(() =>
+    this.templateMode()
+      ? ['Full source code (ZIP)', 'Instant download after payment', 'Lifetime access in your dashboard', 'Use in commercial projects']
+      : ['Lifetime access to every lesson', 'Certificate of completion', 'Learn on phone, tablet and desktop', 'Ask questions under any lesson'],
+  );
+  readonly buttonLabel = computed(() => {
+    if (this.finalAmount() <= 0) return this.templateMode() ? 'Get my downloads' : 'Enroll for free';
+    return `Complete purchase · ${this.prices.formatCharge(this.finalAmount())}`;
+  });
   originalAmount = signal<number>(0);
   /** Which gateways the server has keys for (loaded on open). */
   private gateways = signal<{ razorpay: boolean; stripe: boolean } | null>(null);
@@ -284,6 +405,7 @@ export class CheckoutComponent implements OnInit {
         this.coursesService.getPublicCourseById(id).subscribe({
           next: (course) => {
             this.courseId.set(course.id);
+            this.course.set(course);
             this.itemTitle.set(course.title);
             this.originalAmount.set(payablePrice(course));
             if (!this.authService.isAuthenticated()) {
