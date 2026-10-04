@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as crypto from 'crypto';
 import { BadRequestException } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
+import { PaymentsController } from './payments.controller';
 import { stripeForm, verifyStripeSignature } from './stripe';
 
 const config = (values: Record<string, string>) => ({ get: (key: string) => values[key] }) as any;
@@ -78,6 +79,7 @@ describe('Stripe checkout', () => {
     expect(body).toContain('line_items[0][price_data][unit_amount]=1199');
     expect(body).toContain(`client_reference_id=${order.paymentId}`);
     expect(body).toContain('billing_address_collection=required');
+    expect(body).toContain('payment_intent_data[description]=Angular Course');
     expect(body).toContain(`success_url=https://technyks.com/checkout?payment_return=${order.paymentId}`);
     expect(prisma.inMemoryPayments[0]).toMatchObject({
       id: order.paymentId, provider: 'STRIPE', status: 'PENDING', paymentIntentId: 'cs_test_1',
@@ -190,5 +192,24 @@ describe('gateway minimum amounts', () => {
     fakeFetch({ 'https://api.razorpay.com/v1/orders': () => ({ id: 'order_ok' }) });
     await expect(service.createCheckoutOrder({ userId: 'u1', courseId: 'course-1', provider: 'RAZORPAY', currency: 'INR' }))
       .resolves.toMatchObject({ provider: 'RAZORPAY', razorpayOrderId: 'order_ok' });
+  });
+});
+
+describe('gateway errors at checkout', () => {
+  function failingStripe() {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 400, json: async () => ({ error: { message: 'As per Indian regulations, export transactions require a description.' } }) })));
+  }
+
+  it('shows the gateway reason to admins only', async () => {
+    const { service } = setup();
+    const controller = new PaymentsController(service, {} as any);
+    failingStripe();
+    const order = { courseId: 'course-1', provider: 'STRIPE' as const, currency: 'USD' };
+
+    await expect(controller.createOrder({ user: { id: 'a1', role: 'ADMIN' } }, order))
+      .rejects.toThrow('Admin only: Stripe (400): As per Indian regulations');
+    const student = controller.createOrder({ user: { id: 's1', role: 'STUDENT' } }, order);
+    await expect(student).rejects.toThrow('Payment provider could not process the request. Please retry.');
+    await expect(controller.createOrder({ user: { id: 's1', role: 'STUDENT' } }, order)).rejects.not.toThrow('Admin only');
   });
 });

@@ -252,7 +252,8 @@ export class PaymentsService implements OnModuleInit {
         success_url: `${this.webAppUrl}/checkout?payment_return=${paymentId}`,
         cancel_url: `${this.webAppUrl}/checkout?${returnTo}&payment_cancelled=${paymentId}`,
         metadata: { payment_id: paymentId },
-        payment_intent_data: { metadata: { payment_id: paymentId } },
+        // Indian rules: export (international) payments need a description.
+        payment_intent_data: { description: p.title, metadata: { payment_id: paymentId } },
         line_items: {
           0: {
             quantity: 1,
@@ -643,8 +644,12 @@ export class PaymentsService implements OnModuleInit {
     });
     if (!response.ok) {
       const detail = await response.json().catch(() => null);
-      this.logger.warn(`Stripe ${path} failed (${response.status}): ${detail?.error?.message || 'no details'}`);
-      throw new ServiceUnavailableException('Payment provider could not process the request. Please retry.');
+      const reason = detail?.error?.message || 'no details';
+      this.logger.warn(`Stripe ${path} failed (${response.status}): ${reason}`);
+      const error = new ServiceUnavailableException('Payment provider could not process the request. Please retry.');
+      // Shown to admins only (see PaymentsController), to diagnose setup.
+      (error as any).gatewayDetail = `Stripe (${response.status}): ${reason}`;
+      throw error;
     }
     return response.json();
   }
@@ -658,7 +663,14 @@ export class PaymentsService implements OnModuleInit {
       headers: { Authorization: `Basic ${Buffer.from(`${key}:${secret}`).toString('base64')}`, 'Content-Type': 'application/json' },
       ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000),
     });
-    if (!response.ok) throw new ServiceUnavailableException('Payment provider could not process the request. Please retry.');
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null);
+      const reason = detail?.error?.description || detail?.error?.reason || 'no details';
+      this.logger.warn(`Razorpay ${path} failed (${response.status}): ${reason}`);
+      const error = new ServiceUnavailableException('Payment provider could not process the request. Please retry.');
+      (error as any).gatewayDetail = `Razorpay (${response.status}): ${reason}`;
+      throw error;
+    }
     return response.json();
   }
 }

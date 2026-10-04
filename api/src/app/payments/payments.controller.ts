@@ -1,5 +1,5 @@
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
-import { Controller, Post, Body, Get, Headers, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, Headers, UseGuards, Request, ServiceUnavailableException } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { JwtAuthGuard } from '../auth/guards';
@@ -46,10 +46,18 @@ export class PaymentsController {
     @Request() req: any,
     @Body() dto: { courseId?: string; planId?: string; templateProductIds?: string[]; couponCode?: string; provider?: 'RAZORPAY' | 'LEMON_SQUEEZY' | 'STRIPE'; currency?: string },
   ) {
-    return this.paymentsService.createCheckoutOrder({
-      ...dto,
-      userId: req.user.id,
-    });
+    try {
+      return await this.paymentsService.createCheckoutOrder({
+        ...dto,
+        userId: req.user.id,
+      });
+    } catch (error: any) {
+      // Admins see the gateway's own reason, to diagnose payment setup.
+      if (req.user?.role === 'ADMIN' && error?.gatewayDetail) {
+        throw new ServiceUnavailableException(`${error.message} [Admin only: ${error.gatewayDetail}]`);
+      }
+      throw error;
+    }
   }
 
   @UseGuards(JwtAuthGuard)
