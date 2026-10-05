@@ -48,7 +48,7 @@ import { RouterModule } from '@angular/router';
             To submit a refund request:
           </p>
           <ol class="list-decimal pl-5 space-y-2 text-slate-600 dark:text-[#d9c3af]">
-            <li>Send an email to <a href="mailto:support@codingtechnyks.com" class="text-[#2563EB] dark:text-[#3B82F6] hover:underline font-medium">support&#64;codingtechnyks.com</a> with your registered email and payment reference ID.</li>
+            <li>Send an email to <a href="mailto:contact@technyks.com" class="text-[#2563EB] dark:text-[#3B82F6] hover:underline font-medium">contact&#64;technyks.com</a> with your registered email and payment reference ID.</li>
             <li>Our team will review your request within 24 to 48 hours.</li>
             <li>Approved refunds are credited back to your original payment method (Bank Account / UPI / Card) within 5 to 7 business days as per banking norms.</li>
           </ol>

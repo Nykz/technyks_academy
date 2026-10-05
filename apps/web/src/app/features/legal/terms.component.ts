@@ -67,7 +67,7 @@ import { RouterModule } from '@angular/router';
             5. Contact Information
           </h2>
           <p class="text-slate-600 dark:text-[#d9c3af]">
-            For legal inquiries, contact us at <a href="mailto:support@codingtechnyks.com" class="text-[#2563EB] dark:text-[#3B82F6] hover:underline font-medium">support&#64;codingtechnyks.com</a>.
+            For legal inquiries, contact us at <a href="mailto:contact@technyks.com" class="text-[#2563EB] dark:text-[#3B82F6] hover:underline font-medium">contact&#64;technyks.com</a>.
           </p>
         </section>
       </div>

@@ -27,7 +27,7 @@ import { RouterModule } from '@angular/router';
             1. Overview & Commitment
           </h2>
           <p class="text-slate-600 dark:text-[#d9c3af]">
-            Technyks Academy ("we," "our," or "us") is dedicated to protecting your personal information and your right to privacy. This Privacy Policy governs how we collect, store, utilize, and protect your information when you access our website (<strong>codingtechnyks.com</strong> / <strong>courses.codingtechnyks.com</strong>), enroll in our coding masterclasses, purchase memberships, or use our interactive learning tools.
+            Technyks Academy ("we," "our," or "us") is dedicated to protecting your personal information and your right to privacy. This Privacy Policy governs how we collect, store, utilize, and protect your information when you access our website (<strong>technyks.com</strong>), enroll in our coding masterclasses, purchase memberships, or use our interactive learning tools.
           </p>
         </section>
 
@@ -77,7 +77,7 @@ import { RouterModule } from '@angular/router';
             You have the right to review, update, or request the deletion of your personal data at any time. For questions or privacy requests:
           </p>
           <div class="bg-slate-50 dark:bg-[#040810] p-4 rounded-lg border border-slate-200 dark:border-[#1E293B] font-['JetBrains_Mono'] text-xs">
-            <p><strong>Email:</strong> support&#64;codingtechnyks.com</p>
+            <p><strong>Email:</strong> contact&#64;technyks.com</p>
             <p class="mt-1"><strong>Address:</strong> Technyks Academy, India</p>
           </div>
         </section>
