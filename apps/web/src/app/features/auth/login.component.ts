@@ -417,7 +417,17 @@ export class LoginComponent implements AfterViewInit {
   isLoading = signal(false);
   googleLoading = signal(false);
   showPassword = signal(false);
-  errorMessage = signal('');
+  errorMessage = signal(
+    this.isExpiredRedirect() ? 'Your session has expired. Please sign in again.' : '',
+  );
+
+  private isExpiredRedirect() {
+    try {
+      return new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('expired') === '1';
+    } catch {
+      return false;
+    }
+  }
   googleSetupMessage = signal('');
 
   ngAfterViewInit() {

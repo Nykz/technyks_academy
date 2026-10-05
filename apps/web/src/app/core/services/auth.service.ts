@@ -50,6 +50,14 @@ export class AuthService {
 
   private loadInitialUser() {
     if (typeof window !== 'undefined') {
+      // A session that has already expired (sessions last 7 days) would make
+      // every signed-in request fail; start signed out instead.
+      const token = localStorage.getItem(this.tokenKey);
+      if (token && isExpiredToken(token)) {
+        localStorage.removeItem(this.tokenKey);
+        localStorage.removeItem(this.userKey);
+        return;
+      }
       const savedUser = localStorage.getItem(this.userKey);
       if (savedUser) {
         try {
@@ -178,6 +186,22 @@ export class AuthService {
     });
   }
 
+  /**
+   * The server refused this session (expired or no longer valid): sign out
+   * and send the user to login, then back to where they were.
+   */
+  expireSession() {
+    if (typeof window === 'undefined' || !this.getToken()) return;
+    localStorage.removeItem(this.tokenKey);
+    localStorage.removeItem(this.userKey);
+    this.setOnboardingPending(false);
+    this.currentUser.set(null);
+    const current = this.router.url || '/';
+    this.router.navigate(['/auth/login'], {
+      queryParams: { expired: 1, ...(current.startsWith('/auth') ? {} : { returnUrl: current }) },
+    });
+  }
+
   logout() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(this.tokenKey);
@@ -186,5 +210,18 @@ export class AuthService {
     this.setOnboardingPending(false);
     this.currentUser.set(null);
     this.router.navigate(['/auth/login']);
+  }
+}
+
+/** True when a JWT's "exp" time has passed (or the token can't be read). */
+export function isExpiredToken(token: string, nowSeconds = Math.floor(Date.now() / 1000)): boolean {
+  try {
+    const part = token.split('.')[1];
+    if (!part) return true;
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '='));
+    const exp = Number(JSON.parse(json)?.exp);
+    return Number.isFinite(exp) ? exp <= nowSeconds : false;
+  } catch {
+    return true;
   }
 }
