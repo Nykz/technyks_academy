@@ -728,13 +728,24 @@ export class CheckoutComponent implements OnInit {
       },
       theme: { color: '#2563EB' },
     });
-    checkout.on('payment.failed', () =>
+    checkout.on('payment.failed', (response: any) =>
       this.zone.run(() => {
         clearPendingPayment();
         this.isProcessing.set(false);
-        this.paymentError.set(
-          'Payment failed. Please check your payment method and try again.',
-        );
+        // Razorpay's own, customer-safe reason (e.g. "declined by the bank").
+        const error = response?.error || {};
+        const reason = String(error.description || '').trim();
+        let message = reason
+          ? `Payment failed: ${reason}`
+          : 'Payment failed. Please check your payment method and try again.';
+        if (this.authService.isAdmin()) {
+          const details = [error.code, error.reason, error.step && `step ${error.step}`, error.source && `source ${error.source}`]
+            .filter(Boolean)
+            .join(', ');
+          if (details) message += ` [Admin only: Razorpay ${details}]`;
+        }
+        console.warn('[Razorpay] payment failed', error);
+        this.paymentError.set(message);
       }),
     );
     // Remembered so a reload mid-payment can be re-checked with Razorpay.
