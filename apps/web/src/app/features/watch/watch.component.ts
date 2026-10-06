@@ -82,10 +82,12 @@ import {
 
           <div class="watch-card flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 sm:p-6 rounded">
             <div>
-              <div class="watch-accent inline-flex items-center gap-2 font-['JetBrains_Mono'] text-[11px] mb-1">
-                <span class="material-symbols-outlined text-sm">lock</span>
-                {{ playbackData()?.provider === 'YOUTUBE' ? 'YOUTUBE MEMBERSHIP VIDEO' : 'TOKEN AUTHENTICATED BUNNY STREAM (EXPIRES IN 4H)' }}
-              </div>
+              @if (lessonPosition()) {
+                <div class="watch-accent inline-flex items-center gap-2 font-['JetBrains_Mono'] text-[11px] mb-1 uppercase">
+                  <span class="material-symbols-outlined text-sm">play_circle</span>
+                  {{ lessonPosition() }}
+                </div>
+              }
               <h1 class="watch-heading font-['Hanken_Grotesk'] text-lg sm:text-xl font-bold">
                 {{ playbackData()?.title }}
               </h1>
@@ -855,6 +857,13 @@ export class WatchComponent implements OnInit, OnDestroy {
       if (lesson) return lesson.description || '';
     }
     return '';
+  }
+
+  /** "Lecture 3 of 58" for the lesson being watched. */
+  lessonPosition() {
+    const lessons = (this.course()?.modules || []).flatMap((module) => module.lessons);
+    const index = lessons.findIndex((lesson) => lesson.id === this.currentLessonId());
+    return index >= 0 ? `Lecture ${index + 1} of ${lessons.length}` : '';
   }
 
   totalLessons() {
