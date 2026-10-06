@@ -410,7 +410,7 @@ import { LocalPricePipe } from '../../core/pipes/local-price.pipe';
                   <span class="material-symbols-outlined text-sm text-[#3B82F6]"
                     >check_circle</span
                   >
-                  Protected Bunny Stream & YouTube Membership playback
+                  Secure HD video lessons, anytime on any device
                 </li>
                 <li class="flex items-center gap-2.5">
                   <span class="material-symbols-outlined text-sm text-[#3B82F6]"

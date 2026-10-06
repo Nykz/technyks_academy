@@ -128,19 +128,19 @@ import {
         } @else if (playbackData()) {
           <div class="watch-card w-full aspect-video rounded flex flex-col items-center justify-center p-5 sm:p-8 text-center">
             <span class="material-symbols-outlined text-4xl text-[#3B82F6] mb-2">video_settings</span>
-            <h3 class="watch-heading font-['Hanken_Grotesk'] text-lg font-bold mb-2">Video not connected yet</h3>
+            <h3 class="watch-heading font-['Hanken_Grotesk'] text-lg font-bold mb-2">Video coming soon</h3>
             <p class="watch-muted font-['Inter'] text-sm max-w-md">
-              This lesson does not have a playable video source yet. Add a Bunny Stream video ID or a YouTube Membership video reference in the curriculum.
+              The video for this lesson is being prepared. Please continue with the next lecture.
             </p>
           </div>
         } @else {
           <div class="watch-card w-full aspect-video rounded flex flex-col items-center justify-center p-5 sm:p-8 text-center">
             <span class="material-symbols-outlined text-4xl text-[#ffb4ab] mb-2">lock_person</span>
             <h3 class="watch-heading font-['Hanken_Grotesk'] text-lg font-bold mb-2">
-              {{ playbackError() ? 'This lesson is locked' : 'Streaming Unauthorized' }}
+              {{ playbackError() ? 'This lesson is locked' : 'This lesson is locked' }}
             </h3>
             <p class="watch-muted font-['Inter'] text-sm max-w-md mb-6">
-              {{ playbackError() || 'This is paid token-gated content. Please enroll in this course or join Membership to stream this lesson.' }}
+              {{ playbackError() || 'Enroll in this course or join Membership to watch this lesson.' }}
             </p>
             <a routerLink="/courses" class="font-['JetBrains_Mono'] text-xs uppercase text-[#040810] bg-[#3B82F6] px-6 py-3 rounded font-bold">
               Enroll in Course
