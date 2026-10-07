@@ -468,7 +468,9 @@ export class AdminService {
       } catch (error: any) {
         if (error?.code === 'P2002')
           throw new BadRequestException(
-            'A course with this slug already exists.',
+            /slug/i.test(String(error?.meta?.target || ''))
+              ? 'A course with this slug already exists.'
+              : 'A section or lecture in this course uses an ID that another course already has.',
           );
         throw new BadRequestException('Course could not be created.');
       }
@@ -596,7 +598,9 @@ export class AdminService {
       } catch (error: any) {
         if (error?.code === 'P2002')
           throw new BadRequestException(
-            'A course with this slug already exists.',
+            /slug/i.test(String(error?.meta?.target || ''))
+              ? 'A course with this slug already exists.'
+              : 'A section or lecture in this course uses an ID that another course already has.',
           );
         if (error?.code === 'P2025')
           throw new NotFoundException('Course not found.');

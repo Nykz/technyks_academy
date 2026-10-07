@@ -370,9 +370,8 @@ export class CoursesService {
     ).pipe(
       map((saved) => this.normaliseCourse(saved)),
       tap((saved) => this.cacheCourses([saved])),
-      catchError((error) =>
-        this.isApiUnavailable(error) ? fallback() : throwError(() => error),
-      ),
+      // Never pretend an admin change was saved when the server did not get it.
+      catchError((error) => throwError(() => adminSaveError(error))),
     );
   }
 
@@ -403,9 +402,8 @@ export class CoursesService {
     ).pipe(
       map((created) => this.normaliseCourse(created)),
       tap((created) => this.cacheCourses([created])),
-      catchError((error) =>
-        this.isApiUnavailable(error) ? fallback() : throwError(() => error),
-      ),
+      // Never pretend an admin change was saved when the server did not get it.
+      catchError((error) => throwError(() => adminSaveError(error))),
     );
   }
 
@@ -426,9 +424,8 @@ export class CoursesService {
     ).pipe(
       map((course) => this.normaliseCourse(course)),
       tap((course) => this.cacheCourses([course])),
-      catchError((error) =>
-        this.isApiUnavailable(error) ? fallback() : throwError(() => error),
-      ),
+      // Never pretend an admin change was saved when the server did not get it.
+      catchError((error) => throwError(() => adminSaveError(error))),
     );
   }
 
@@ -457,7 +454,7 @@ export class CoursesService {
       // no matching row (for example, a draft created during an API outage).
       // Treat that already-absent server record as an idempotent delete.
       catchError((error) =>
-        this.isApiUnavailable(error) ? fallback() : throwError(() => error),
+        error?.status === 404 ? fallback() : throwError(() => adminSaveError(error)),
       ),
     );
   }
@@ -533,8 +530,8 @@ export class CoursesService {
       id: course.id,
       slug,
       title: course.title || 'Untitled Course',
-      subtitle: course.subtitle || '',
-      description: course.description || '',
+      subtitle: withoutImportPlaceholder(course.subtitle),
+      description: withoutImportPlaceholder(course.description),
       thumbnail: this.normaliseThumbnail(course.thumbnail),
       promoVideoUrl: this.normaliseMediaUrl(course.promoVideoUrl),
       price: Number(course.price || 0),
@@ -632,4 +629,31 @@ export function salePercentOff(course: { price?: unknown; salePrice?: unknown; i
   const sale = activeSalePrice(course);
   const price = Number(course?.price || 0);
   return sale === null || !price ? 0 : Math.round((1 - sale / price) * 100);
+}
+
+/** Filler text the course importer used to save; never shown to visitors. */
+const IMPORT_PLACEHOLDERS = new Set([
+  'Course curriculum imported from a local folder.',
+  'Draft course. Complete the landing page details, thumbnail, price, and publishing settings in the admin panel before making it live.',
+]);
+
+export function withoutImportPlaceholder(value: unknown): string {
+  const text = String(value ?? '').trim();
+  return IMPORT_PLACEHOLDERS.has(text) ? '' : text;
+}
+
+/**
+ * An admin change the server did not accept. A dropped connection used to be
+ * saved only in this browser and reported as saved; say so plainly instead.
+ */
+function adminSaveError(error: any) {
+  if (error?.status === 0 || (error?.status === 200 && /parse|json/i.test(String(error?.message || '')))) {
+    return {
+      ...error,
+      status: error?.status ?? 0,
+      error: { message: 'Could not reach the server, so nothing was saved. Check your connection and try again.' },
+      message: 'Could not reach the server, so nothing was saved. Check your connection and try again.',
+    };
+  }
+  return error;
 }

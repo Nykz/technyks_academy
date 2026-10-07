@@ -14,6 +14,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { AppModule } from './app/app.module';
+import { resolveWebPage } from './web-page';
 import { MediaService, getUploadsDirectory } from './app/admin/media.service';
 
 function getWebDirectory() {
@@ -155,6 +156,9 @@ async function bootstrap() {
     app.useStaticAssets(webDirectory, {
       index: false,
       fallthrough: true,
+      // "/privacy-policy" must not bounce to "/privacy-policy/"; the page
+      // handler below serves the right HTML for both.
+      redirect: false,
     });
 
     const expressApp = app.getHttpAdapter().getInstance();
@@ -177,7 +181,8 @@ async function bootstrap() {
           return;
         }
 
-        response.sendFile(join(webDirectory, 'index.html'));
+        response.setHeader('Cache-Control', 'no-cache');
+        response.sendFile(resolveWebPage(webDirectory, requestPath));
       },
     );
     Logger.log(

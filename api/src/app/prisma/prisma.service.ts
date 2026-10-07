@@ -55,6 +55,7 @@ export class PrismaService
       await this.ensureEnumValues();
       await this.ensureCommunicationTables();
       await this.ensureTemplateStoreTables();
+      await this.clearImportPlaceholders();
       this.isDbConnected = true;
       this.logger.log(' Connected successfully to MySQL database via Prisma');
     } catch (error: any) {
@@ -120,6 +121,28 @@ export class PrismaService
    * Adds new enum values to existing tables (MODIFY keeps current rows).
    * Safe to run on every start.
    */
+  /**
+   * The course importer used to fill subtitle/description with filler text
+   * that then showed on the landing page. Blank exactly those values so the
+   * page hides them until real text is added in the admin panel.
+   */
+  private async clearImportPlaceholders() {
+    try {
+      await this.$executeRawUnsafe(
+        'UPDATE `Course` SET `subtitle` = ? WHERE `subtitle` = ?',
+        '',
+        'Course curriculum imported from a local folder.',
+      );
+      await this.$executeRawUnsafe(
+        'UPDATE `Course` SET `description` = ? WHERE `description` = ?',
+        '',
+        'Draft course. Complete the landing page details, thumbnail, price, and publishing settings in the admin panel before making it live.',
+      );
+    } catch (error: any) {
+      this.logger.warn(`Could not clear imported placeholder text: ${error?.message || error}`);
+    }
+  }
+
   private async ensureEnumValues() {
     try {
       await this.$executeRawUnsafe(

@@ -290,8 +290,8 @@ function basicCoursePayload(title, modules, price) {
   return {
     slug,
     title,
-    subtitle: 'Course curriculum imported from a local folder.',
-    description: 'Draft course. Complete the landing page details, thumbnail, price, and publishing settings in the admin panel before making it live.',
+    subtitle: '',
+    description: '',
     price: price ?? 0,
     isFree: price === 0,
     currency: 'INR',

@@ -43,7 +43,7 @@ describe('apiUrlInterceptor on technyks.com', () => {
     expect(calls).toEqual(['https://api.technyks.com/api/fx/visitor', '/api/fx/visitor']);
 
     await firstValueFrom(apiUrlInterceptor(new HttpRequest('GET', '/api/templates'), next as any));
-    expect(calls.at(-1)).toBe('/api/templates');
+    expect(calls[calls.length - 1]).toBe('/api/templates');
     expect(calls).toHaveLength(3);
   });
 

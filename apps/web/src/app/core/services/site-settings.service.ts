@@ -1,6 +1,6 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { catchError, map, Observable, of, shareReplay, tap } from 'rxjs';
+import { catchError, map, Observable, of, shareReplay, tap, throwError } from 'rxjs';
 
 export interface AnnouncementBarSettings {
   enabled: boolean;
@@ -133,6 +133,12 @@ export class SiteSettingsService {
           },
         })),
         tap((saved) => this.saveLocalSettings(saved)),
+        // The server did not save it: show the real (unchanged) settings
+        // again instead of leaving the unsaved version on this screen.
+        catchError((error) => {
+          this.saveLocalSettings(current);
+          return throwError(() => error);
+        }),
       );
   }
 

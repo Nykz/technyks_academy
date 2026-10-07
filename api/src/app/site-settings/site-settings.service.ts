@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 type AnnouncementTheme = 'blue' | 'amber' | 'emerald' | 'purple';
@@ -68,8 +68,13 @@ export class SiteSettingsService {
           update: { value: settings as any },
         });
         return this.normalise(saved.value);
-      } catch {
-        // Keep the API functional during a transient database or schema outage.
+      } catch (error: any) {
+        // Saving only in this server's memory would show the change on one
+        // server, lose it on restart, and still tell the admin it was saved.
+        new Logger(SiteSettingsService.name).error(
+          `Could not save site settings: ${error?.message || error}`,
+        );
+        throw new ServiceUnavailableException('Settings could not be saved right now. Please try again.');
       }
     }
 

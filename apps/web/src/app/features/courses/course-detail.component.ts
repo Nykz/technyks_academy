@@ -71,11 +71,15 @@ import { UserAvatarComponent } from '../../core/components/user-avatar/user-avat
                 {{ course()?.title }}
               </h1>
 
-              <p
-                class="font-['Inter'] text-lg text-slate-600 dark:text-[#d9c3af] mb-8 leading-relaxed"
-              >
-                {{ course()?.subtitle }}
-              </p>
+              @if (course()?.subtitle) {
+                <p
+                  class="font-['Inter'] text-lg text-slate-600 dark:text-[#d9c3af] mb-8 leading-relaxed"
+                >
+                  {{ course()?.subtitle }}
+                </p>
+              } @else {
+                <div class="mb-8"></div>
+              }
 
               <div
                 class="flex flex-wrap items-center gap-6 font-['JetBrains_Mono'] text-xs text-slate-600 dark:text-[#a18d7b]"
@@ -85,7 +89,7 @@ import { UserAvatarComponent } from '../../core/components/user-avatar/user-avat
                     class="material-symbols-outlined text-[#2563EB] dark:text-[#3B82F6] text-base"
                     >schedule</span
                   >
-                  {{ getTotalDurationMinutes() }} Minutes Total
+                  {{ formatCourseLength() }} total
                 </div>
                 <div class="flex items-center gap-2">
                   <span
@@ -107,8 +111,13 @@ import { UserAvatarComponent } from '../../core/components/user-avatar/user-avat
                     class="material-symbols-outlined text-amber-500 dark:text-[#3B82F6] text-base"
                     >star</span
                   >
-                  {{ course()?.rating || 0 | number: '1.1-1' }}
-                  ({{ course()?.reviewCount || 0 }} reviews)
+                  @if (course()?.reviewCount) {
+                    {{ course()?.rating || 0 | number: '1.1-1' }}
+                    ({{ course()?.reviewCount }}
+                    {{ course()?.reviewCount === 1 ? 'review' : 'reviews' }})
+                  } @else {
+                    New course
+                  }
                 </div>
               </div>
             </div>
@@ -601,8 +610,13 @@ import { UserAvatarComponent } from '../../core/components/user-avatar/user-avat
                     <p
                       class="font-['Inter'] text-sm text-slate-600 dark:text-[#a18d7b] mt-2"
                     >
-                      {{ course()?.rating || 0 | number: '1.1-1' }} average
-                      rating · {{ course()?.reviewCount || 0 }} reviews
+                      @if (course()?.reviewCount) {
+                        {{ course()?.rating || 0 | number: '1.1-1' }} average
+                        rating · {{ course()?.reviewCount }}
+                        {{ course()?.reviewCount === 1 ? 'review' : 'reviews' }}
+                      } @else {
+                        No reviews yet. Enrolled students can share theirs.
+                      }
                     </p>
                   </div>
                 </div>
@@ -834,7 +848,7 @@ export class CourseDetailComponent implements OnInit {
             this.titleService.setTitle(`${data.title} - Technyks Academy`);
             this.metaService.updateTag({
               name: 'description',
-              content: data.subtitle,
+              content: data.subtitle || data.description || `${data.title} - an online course on Technyks Academy.`,
             });
           },
           error: () => this.isLoading.set(false),
@@ -969,6 +983,15 @@ export class CourseDetailComponent implements OnInit {
           );
         },
       });
+  }
+
+  /** "25h 1m", "45m" */
+  formatCourseLength(): string {
+    const minutes = this.getTotalDurationMinutes();
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    if (!hours) return `${rest}m`;
+    return rest ? `${hours}h ${rest}m` : `${hours}h`;
   }
 
   getTotalDurationMinutes(): number {

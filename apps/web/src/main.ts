@@ -1,10 +1,24 @@
 import { bootstrapApplication } from '@angular/platform-browser';
+import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
+import { filter, firstValueFrom, timeout } from 'rxjs';
 import { appConfig } from './app/app.config';
 import { App } from './app/app';
 
 bootstrapApplication(App, appConfig)
-  .then(() => {
+  .then(async (appRef) => {
     if (typeof document === 'undefined') return;
+
+    // Keep the preloader up until the page the visitor opened has rendered,
+    // so a reload never shows a half-built or wrong page first.
+    const router = appRef.injector.get(Router);
+    if (!router.navigated) {
+      await firstValueFrom(
+        router.events.pipe(
+          filter((event) => event instanceof NavigationEnd || event instanceof NavigationCancel || event instanceof NavigationError),
+          timeout(6000),
+        ),
+      ).catch(() => undefined);
+    }
 
     const revealApplication = () => {
       const preloader = document.getElementById('app-preloader');
