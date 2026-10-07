@@ -134,6 +134,9 @@ model Enrollment {
   course              Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   progressPercent     Float    @default(0.0)
   lastWatchedLessonId String?
+  /// Set when the course came with a membership plan; such access ends with
+  /// the membership. Null for courses bought or enrolled on their own.
+  membershipPlanId    String?
   // MySQL does not support Prisma scalar-list columns; keep lesson IDs as JSON.
   completedLessonIds  Json
   createdAt           DateTime @default(now())

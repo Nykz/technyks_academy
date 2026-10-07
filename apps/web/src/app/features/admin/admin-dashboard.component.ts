@@ -1,4 +1,5 @@
 import { Component, signal, computed, inject, OnInit } from '@angular/core';
+import { PaymentsService, StripeSetupCheck } from '../../core/services/payments.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterModule, Router } from '@angular/router';
@@ -249,6 +250,41 @@ type AdminTab =
 
       <!-- TAB 2: REVENUE ANALYTICS -->
       @if (activeTab() === 'revenue') {
+        <!-- Stripe diagnostics: shows Stripe's own reason when card payments fail. -->
+        <div class="bg-[#121A2B] technical-border p-6 rounded mb-8">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div class="font-['JetBrains_Mono'] text-xs text-[#a18d7b] uppercase mb-1">Stripe (international card payments)</div>
+              <p class="text-sm text-[#d9c3af]">Checks your Stripe keys and account, and tries a US$1.00 test checkout that is cancelled straight away. Nothing is charged.</p>
+            </div>
+            <button type="button" (click)="runStripeCheck()" [disabled]="stripeCheckRunning()"
+              class="font-['JetBrains_Mono'] text-xs uppercase font-bold bg-[#3B82F6] text-[#040810] px-5 py-3 rounded disabled:opacity-60">
+              {{ stripeCheckRunning() ? 'Checking…' : 'Check Stripe setup' }}
+            </button>
+          </div>
+          @if (stripeCheck(); as check) {
+            <div class="mt-5 border-t border-[#1E293B] pt-4 text-sm text-[#e0e3e5]">
+              @if (check.problems.length) {
+                <p class="font-bold text-[#ffb4ab] mb-2">Problems found:</p>
+                <ul class="list-disc pl-5 space-y-1 text-[#ffb4ab]">
+                  @for (problem of check.problems; track problem) { <li>{{ problem }}</li> }
+                </ul>
+              } @else {
+                <p class="font-bold text-emerald-400">No problems found. Stripe accepts checkouts from this site.</p>
+              }
+              <p class="mt-3 font-['JetBrains_Mono'] text-xs text-[#a18d7b]">
+                Key: {{ check.mode || 'not set' }} · Test checkout: {{ check.testCheckout || 'not tried' }}
+                @if (check.account; as account) {
+                  · Account country: {{ account['country'] }} · Payments enabled: {{ account['chargesEnabled'] ? 'yes' : 'no' }}
+                }
+              </p>
+            </div>
+          }
+          @if (stripeCheckError()) {
+            <p class="mt-4 text-sm text-[#ffb4ab]" role="alert">{{ stripeCheckError() }}</p>
+          }
+        </div>
+
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           <div class="bg-[#121A2B] technical-border p-6 rounded">
             <div class="font-['JetBrains_Mono'] text-xs text-[#a18d7b] uppercase mb-1">Total Revenue</div>
@@ -886,6 +922,25 @@ type AdminTab =
 })
 export class AdminDashboardComponent implements OnInit {
   private adminService = inject(AdminService);
+  private paymentsService = inject(PaymentsService);
+  stripeCheck = signal<StripeSetupCheck | null>(null);
+  stripeCheckRunning = signal(false);
+  stripeCheckError = signal('');
+
+  runStripeCheck() {
+    this.stripeCheckRunning.set(true);
+    this.stripeCheckError.set('');
+    this.paymentsService.stripeSetupCheck().subscribe({
+      next: (check) => {
+        this.stripeCheck.set(check);
+        this.stripeCheckRunning.set(false);
+      },
+      error: (error) => {
+        this.stripeCheckRunning.set(false);
+        this.stripeCheckError.set(error?.error?.message || 'The check could not run. Please try again.');
+      },
+    });
+  }
   private coursesService = inject(CoursesService);
   private templatesService = inject(TemplatesService);
   private contactService = inject(ContactService);

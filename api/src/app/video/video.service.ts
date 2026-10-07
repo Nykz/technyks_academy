@@ -74,6 +74,9 @@ export class VideoService {
               userId_courseId: { userId, courseId: lesson.module.courseId },
             },
           });
+          // A course that came with a membership counts only while a
+          // membership covering it is active (checked below).
+          if (enrollment?.membershipPlanId) enrollment = null;
           activeSub = enrollment ? null : await this.prisma.subscription.findFirst({
             where: { userId, status: 'ACTIVE', currentPeriodEnd: { gt: new Date() } },
             include: { plan: { include: { courseAccess: true } } },
@@ -89,9 +92,13 @@ export class VideoService {
             item.userId === userId && item.courseId === lesson.module.courseId,
         );
       }
+      if (enrollment?.membershipPlanId) enrollment = null;
       if (!activeSub && !usingDatabase) {
         activeSub = this.prisma.inMemorySubscriptions.find(
-          (item) => item.userId === userId && item.status === 'ACTIVE',
+          (item) =>
+            item.userId === userId &&
+            item.status === 'ACTIVE' &&
+            new Date(item.currentPeriodEnd) > new Date(),
         );
       }
 

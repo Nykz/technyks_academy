@@ -1,1 +1,0 @@
-import{nn as kc}from"./chunk-zxzqi6c5.js";import{r as f}from"./main-VAVX2M5T.js";var t=class r{transform(e){return f(e)}static ɵfac=function(a){return new(a||r)};static ɵpipe=kc({name:`mediaUrl`,type:r,pure:!0})};export{t};

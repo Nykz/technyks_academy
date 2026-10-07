@@ -5,6 +5,7 @@ import { Observable, catchError, map, of } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 import { EnrollmentsService } from '../services/enrollments.service';
 import { TemplatesService } from '../services/templates.service';
+import { PaymentsService } from '../services/payments.service';
 
 /** How long after an enrollment/purchase the thank-you page stays available. */
 export const THANK_YOU_WINDOW_MS = 30 * 60 * 1000;
@@ -15,7 +16,8 @@ export const THANK_YOU_WINDOW_MS = 30 * 60 * 1000;
  */
 export type ThankYouContext =
   | { kind: 'course'; courseId: string }
-  | { kind: 'templates'; productIds: string[] };
+  | { kind: 'templates'; productIds: string[] }
+  | { kind: 'membership'; planId: string };
 
 /** Navigation extras for going to /thank-you after a confirmed enrollment. */
 export function thankYouNavigation(context: ThankYouContext) {
@@ -25,6 +27,9 @@ export function thankYouNavigation(context: ThankYouContext) {
 function contextFrom(state: unknown): ThankYouContext | null {
   const context = (state as { thankYou?: ThankYouContext } | null)?.thankYou;
   if (context?.kind === 'course' && typeof context.courseId === 'string' && context.courseId) {
+    return context;
+  }
+  if (context?.kind === 'membership' && typeof context.planId === 'string' && context.planId) {
     return context;
   }
   if (
@@ -60,6 +65,7 @@ export const thankYouGuard: CanActivateFn = (): Observable<boolean | UrlTree> | 
   const auth = inject(AuthService);
   const enrollments = inject(EnrollmentsService);
   const templates = inject(TemplatesService);
+  const payments = inject(PaymentsService);
   const isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   const dashboard = router.createUrlTree(['/dashboard']);
 
@@ -75,10 +81,22 @@ export const thankYouGuard: CanActivateFn = (): Observable<boolean | UrlTree> | 
   if (context.kind === 'course') {
     return enrollments.getMyEnrollments().pipe(
       map((items) =>
-        items.some((item) => item.courseId === context.courseId && isRecent(item.createdAt, now))
+        items.some(
+          (item) =>
+            item.courseId === context.courseId &&
+            // updatedAt: a course already open through a membership, bought just now.
+            (isRecent(item.createdAt, now) || isRecent(item.updatedAt, now)),
+        )
           ? true
           : dashboard,
       ),
+      catchError(() => of(dashboard)),
+    );
+  }
+  if (context.kind === 'membership') {
+    // The membership must be active on the server (bought or renewed just now).
+    return payments.myMemberships().pipe(
+      map((plans) => (plans.some((plan) => plan.planId === context.planId) ? true : dashboard)),
       catchError(() => of(dashboard)),
     );
   }

@@ -55,7 +55,7 @@ describe('EnrollmentsService - Progress Tracking', () => {
         progressPercent: 0,
         completedLessonIds: [],
       },
-      update: {},
+      update: { membershipPlanId: null },
     });
     expect(result.courseId).toBe('course_free');
   });

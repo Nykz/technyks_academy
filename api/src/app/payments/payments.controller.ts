@@ -1,5 +1,5 @@
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
-import { Controller, Post, Body, Get, Headers, UseGuards, Request, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Headers, UseGuards, Request, ServiceUnavailableException, ForbiddenException } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { JwtAuthGuard } from '../auth/guards';
@@ -37,6 +37,22 @@ export class PaymentsController {
       planId: dto.planId,
       templateProductId: dto.templateProductId,
     });
+  }
+
+  /** The signed-in user's active memberships. */
+  @UseGuards(JwtAuthGuard)
+  @Get('membership/my')
+  myMemberships(@Request() req: any) {
+    return this.paymentsService.getMyMemberships(req.user.id);
+  }
+
+  /** Admin only: why Stripe refuses payments (keys, activation, a test checkout). */
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Get('admin/stripe-check')
+  stripeCheck(@Request() req: any) {
+    if (req.user?.role !== 'ADMIN') throw new ForbiddenException('Admins only.');
+    return this.paymentsService.checkStripeSetup();
   }
 
   @UseGuards(JwtAuthGuard)

@@ -7,18 +7,29 @@ import {
 import { Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CertificatesService } from '../certificates/certificates.service';
+import {
+  MembershipAccessService,
+  enrollmentAllowed,
+} from '../membership/membership-access.service';
 
 @Injectable()
 export class EnrollmentsService {
   constructor(
     private prisma: PrismaService,
     @Optional() private certificates?: CertificatesService,
+    @Optional() private membership?: MembershipAccessService,
   ) {}
 
+  /** Active membership plan IDs, after giving members their plan's courses. */
+  private activePlanIds(userId: string) {
+    return this.membership?.sync(userId) ?? Promise.resolve(new Set<string>());
+  }
+
   async getMyEnrollments(userId: string) {
+    const activePlans = await this.activePlanIds(userId);
     if (this.prisma.isDbConnected) {
       try {
-        return await this.prisma.enrollment.findMany({
+        const enrollments = await this.prisma.enrollment.findMany({
           where: { userId },
           include: {
             course: {
@@ -42,6 +53,7 @@ export class EnrollmentsService {
           },
           orderBy: { updatedAt: 'desc' },
         });
+        return enrollments.filter((enrollment) => enrollmentAllowed(enrollment, activePlans));
       } catch {
         throw new ServiceUnavailableException(
           'Your data could not be loaded or saved. Please retry shortly.',
@@ -59,10 +71,11 @@ export class EnrollmentsService {
             (course) => course.id === enrollment.courseId,
           ),
       }))
-      .filter((enrollment) => enrollment.course);
+      .filter((enrollment) => enrollment.course && enrollmentAllowed(enrollment, activePlans));
   }
 
   async getCourseAccess(userId: string, courseId: string) {
+    const activePlans = await this.activePlanIds(userId);
     let enrollment: any = null;
     if (this.prisma.isDbConnected) {
       try {
@@ -80,9 +93,10 @@ export class EnrollmentsService {
       );
     }
 
+    const enrolled = enrollmentAllowed(enrollment, activePlans);
     return {
-      enrolled: Boolean(enrollment),
-      enrollment: enrollment || null,
+      enrolled,
+      enrollment: enrolled ? enrollment : null,
     };
   }
 
@@ -95,8 +109,10 @@ export class EnrollmentsService {
       : this.prisma.inMemoryEnrollments.find(
           (item) => item.userId === userId && item.courseId === courseId,
         );
-    if (owned) return owned;
     let course: any = null;
+    // Already enrolled on their own: nothing to do. Enrolled only through a
+    // membership: continue, so the free enrollment becomes permanent.
+    if (owned && !owned.membershipPlanId) return owned;
 
     if (this.prisma.isDbConnected) {
       try {
@@ -143,7 +159,7 @@ export class EnrollmentsService {
             progressPercent: 0,
             completedLessonIds: [],
           },
-          update: {},
+          update: { membershipPlanId: null } as any,
         });
       } catch {
         throw new ServiceUnavailableException(
@@ -156,7 +172,10 @@ export class EnrollmentsService {
       (enrollment) =>
         enrollment.userId === userId && enrollment.courseId === course.id,
     );
-    if (existing) return existing;
+    if (existing) {
+      existing.membershipPlanId = null;
+      return existing;
+    }
 
     const enrollment = {
       id: `enrollment_${Date.now().toString(36)}`,
@@ -208,7 +227,7 @@ export class EnrollmentsService {
         (item) => item.userId === userId && item.courseId === course.id,
       );
     }
-    if (!enrollment)
+    if (!enrollmentAllowed(enrollment, await this.activePlanIds(userId)))
       throw new ForbiddenException(
         'You must enroll in this course before saving progress.',
       );

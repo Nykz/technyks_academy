@@ -6,6 +6,7 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import {
   PaymentsService,
   CouponValidationResult,
+  MembershipPlan,
 } from '../../core/services/payments.service';
 import { AuthService } from '../../core/services/auth.service';
 import { EnrollmentsService } from '../../core/services/enrollments.service';
@@ -35,7 +36,7 @@ import {
         class="inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-[#2563EB] dark:text-slate-300 dark:hover:text-[#60A5FA]"
       >
         <span class="material-symbols-outlined text-lg" aria-hidden="true">arrow_back</span>
-        {{ templateMode() ? 'Back to cart' : 'Back to course' }}
+        {{ templateMode() ? 'Back to cart' : plan() ? 'Back to membership' : 'Back to course' }}
       </a>
       <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <h1 class="font-['Hanken_Grotesk'] text-3xl font-bold text-slate-950 dark:text-white sm:text-4xl">Checkout</h1>
@@ -102,6 +103,21 @@ import {
                     <span class="inline-flex items-center gap-1"><span class="material-symbols-outlined text-base text-[#2563EB] dark:text-[#60A5FA]" aria-hidden="true">workspace_premium</span>Certificate</span>
                   </div>
                   <p class="mt-3 text-lg font-bold text-slate-950 dark:text-white sm:hidden">{{ prices.formatCharge(originalAmount()) }}</p>
+                </div>
+              </div>
+            } @else if (plan(); as m) {
+              <div class="mt-4 flex items-start gap-4">
+                <span class="grid h-14 w-14 shrink-0 place-items-center rounded-xl !bg-amber-100 !text-amber-600 dark:!bg-amber-400/15 dark:!text-amber-300" aria-hidden="true">
+                  <span class="material-symbols-outlined text-3xl">workspace_premium</span>
+                </span>
+                <div class="min-w-0 flex-1">
+                  <h3 class="font-['Hanken_Grotesk'] text-lg font-bold leading-snug text-slate-950 dark:text-white">{{ m.name }} membership</h3>
+                  @if (m.description) {
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">{{ m.description }}</p>
+                  }
+                  <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-[#2563EB] dark:text-[#60A5FA]">
+                    {{ m.interval === 'MONTHLY' ? 'Billed once · 1 month of access' : 'Billed once · 1 year of access' }}
+                  </p>
                 </div>
               </div>
             } @else {
@@ -293,6 +309,8 @@ export class CheckoutComponent implements OnInit {
 
   courseId = signal<string | null>(null);
   planSlug = signal<string | null>(null);
+  /** The membership plan being bought, for the order card. */
+  plan = signal<MembershipPlan | null>(null);
   templateMode = signal(false);
   itemTitle = signal<string>('Technyks Architecture Course');
   /** The course being bought, for the order card. */
@@ -313,15 +331,22 @@ export class CheckoutComponent implements OnInit {
     return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
   });
   readonly backLink = computed(() =>
-    this.templateMode() ? ['/cart'] : this.course() ? ['/courses', this.course()!.slug] : ['/courses'],
+    this.templateMode() ? ['/cart'] : this.plan() ? ['/membership'] : this.course() ? ['/courses', this.course()!.slug] : ['/courses'],
   );
-  readonly includes = computed(() =>
-    this.templateMode()
+  readonly includes = computed(() => {
+    const plan = this.plan();
+    if (plan) {
+      const features = Array.isArray(plan.features) ? plan.features.filter(Boolean) : [];
+      return features.length
+        ? features.slice(0, 6)
+        : [plan.accessAllCourses ? 'Every course on Technyks' : 'All courses in this plan', 'Certificates of completion', 'Learn on phone, tablet and desktop', 'Ask questions under any lesson'];
+    }
+    return this.templateMode()
       ? ['Full source code (ZIP)', 'Instant download after payment', 'Lifetime access in your dashboard', 'Use in commercial projects']
-      : ['Lifetime access to every lesson', 'Certificate of completion', 'Learn on phone, tablet and desktop', 'Ask questions under any lesson'],
-  );
+      : ['Lifetime access to every lesson', 'Certificate of completion', 'Learn on phone, tablet and desktop', 'Ask questions under any lesson'];
+  });
   readonly buttonLabel = computed(() => {
-    if (this.finalAmount() <= 0) return this.templateMode() ? 'Get my downloads' : 'Enroll for free';
+    if (this.finalAmount() <= 0) return this.templateMode() ? 'Get my downloads' : this.plan() ? 'Activate membership' : 'Enroll for free';
     return `Complete purchase · ${this.prices.formatCharge(this.finalAmount())}`;
   });
   originalAmount = signal<number>(0);
@@ -369,6 +394,7 @@ export class CheckoutComponent implements OnInit {
       this.clearCoupon();
       this.courseId.set(null);
       this.planSlug.set(null);
+      this.plan.set(null);
       this.templateMode.set(false);
       this.summaryError.set('');
       this.isLoadingSummary.set(true);
@@ -442,13 +468,13 @@ export class CheckoutComponent implements OnInit {
           next: (plans) => {
             const plan = plans.find((p) => p.slug === this.planSlug());
             this.isLoadingSummary.set(false);
-            if (plan) {
-              this.itemTitle.set(plan.name);
-              this.originalAmount.set(plan.price);
+            if (!plan) {
+              this.summaryError.set('This membership plan is not available. Please choose another plan.');
+              return;
             }
-            this.summaryError.set(
-              'Membership checkout is currently unavailable. Please contact support.',
-            );
+            this.plan.set(plan);
+            this.itemTitle.set(`${plan.name} membership`);
+            this.originalAmount.set(Number(plan.price) || 0);
           },
           error: () => {
             this.isLoadingSummary.set(false);
@@ -536,7 +562,7 @@ export class CheckoutComponent implements OnInit {
     this.paymentsService
       .createOrder({
         courseId: this.courseId() || undefined,
-        planId: this.planSlug() || undefined,
+        planId: this.plan()?.id || undefined,
         templateProductIds: this.templateMode()
           ? this.cart.items().map((item) => item.id)
           : undefined,
@@ -597,7 +623,9 @@ export class CheckoutComponent implements OnInit {
     this.recoveryMessage.set('');
     trackGoogleAdsPurchase(payment);
     const productIds = this.templateIdsFrom(payment?.templateProductIds);
-    const context: ThankYouContext = payment?.courseId
+    const context: ThankYouContext = payment?.planId
+      ? { kind: 'membership', planId: payment.planId }
+      : payment?.courseId
       ? { kind: 'course', courseId: payment.courseId }
       : productIds.length
         ? { kind: 'templates', productIds }
@@ -658,6 +686,7 @@ export class CheckoutComponent implements OnInit {
 
   /** What was bought, for the /thank-you guard (read before the cart is cleared). */
   private thankYouContext(): ThankYouContext {
+    if (this.plan()) return { kind: 'membership', planId: this.plan()!.id };
     return this.templateMode()
       ? { kind: 'templates', productIds: this.cart.items().map((item) => item.id) }
       : { kind: 'course', courseId: this.courseId() ?? '' };

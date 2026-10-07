@@ -58,7 +58,7 @@ describe('PaymentsService', () => {
     expect(mockPrisma.enrollment.upsert).toHaveBeenCalledWith({
       where: { userId_courseId: { userId: 'user_1', courseId: 'course_1' } },
       create: { userId: 'user_1', courseId: 'course_1', progressPercent: 0, completedLessonIds: [] },
-      update: {},
+      update: { membershipPlanId: null },
     });
   });
 
@@ -74,7 +74,7 @@ describe('PaymentsService', () => {
 
     expect(mockPrisma.course.findUnique).not.toHaveBeenCalled();
     expect(mockPrisma.enrollment.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      update: {},
+      update: { membershipPlanId: null },
       where: { userId_courseId: { userId: 'user_1', courseId: 'course_1' } },
     }));
   });

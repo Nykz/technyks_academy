@@ -26,6 +26,22 @@ export interface MembershipPlan {
   courseAccess?: { courseId: string }[];
 }
 
+/** A membership the signed-in user can learn with right now. */
+export interface ActiveMembership {
+  planId: string;
+  name: string;
+  currentPeriodEnd: string;
+  accessAllCourses: boolean;
+}
+
+export interface StripeSetupCheck {
+  configured: boolean;
+  mode?: string;
+  account?: Record<string, unknown> | null;
+  testCheckout?: string;
+  problems: string[];
+}
+
 export interface OrderResponse {
   provider: 'RAZORPAY' | 'LEMON_SQUEEZY' | 'STRIPE' | 'FREE';
   completed?: boolean;
@@ -71,6 +87,15 @@ export class PaymentsService {
   /** After Stripe sends the buyer back: the server confirms with Stripe and enrolls. */
   verifyStripe(paymentId: string): Observable<any> {
     return this.http.post<any>('/api/payments/verify-stripe', { paymentId });
+  }
+
+  myMemberships(): Observable<ActiveMembership[]> {
+    return this.http.get<ActiveMembership[]>('/api/payments/membership/my');
+  }
+
+  /** Admin only: asks Stripe why payments are refused. */
+  stripeSetupCheck(): Observable<StripeSetupCheck> {
+    return this.http.get<StripeSetupCheck>('/api/payments/admin/stripe-check');
   }
 
   /** Re-checks a started payment with its gateway (reload / closed tab). */

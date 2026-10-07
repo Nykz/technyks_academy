@@ -6,6 +6,7 @@ import { Observable, firstValueFrom, isObservable, of, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 import { EnrollmentsService } from '../services/enrollments.service';
 import { TemplatesService } from '../services/templates.service';
+import { PaymentsService } from '../services/payments.service';
 import { THANK_YOU_WINDOW_MS, thankYouGuard, thankYouNavigation } from './thank-you.guard';
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
@@ -16,6 +17,7 @@ function runGuard(options: {
   historyState?: unknown;
   enrollments?: Observable<any[]>;
   purchases?: Observable<any[]>;
+  memberships?: Observable<any[]>;
   platform?: string;
 }) {
   vi.stubGlobal('window', { history: { state: options.historyState ?? null } });
@@ -25,12 +27,14 @@ function runGuard(options: {
   };
   const enrollmentsCall = vi.fn(() => options.enrollments ?? of([]));
   const purchasesCall = vi.fn(() => options.purchases ?? of([]));
+  const membershipsCall = vi.fn(() => options.memberships ?? of([]));
   const injector = Injector.create({
     providers: [
       { provide: Router, useValue: router },
       { provide: AuthService, useValue: { isAuthenticated: () => options.signedIn ?? true } },
       { provide: EnrollmentsService, useValue: { getMyEnrollments: enrollmentsCall } },
       { provide: TemplatesService, useValue: { purchases: purchasesCall } },
+      { provide: PaymentsService, useValue: { myMemberships: membershipsCall } },
       { provide: PLATFORM_ID, useValue: options.platform ?? 'browser' },
     ],
   });
@@ -114,5 +118,13 @@ describe('thankYouGuard', () => {
   it('never renders the page on the server', async () => {
     const { result } = runGuard({ platform: 'server', state: courseState });
     expect(await outcome(result)).toBe('/courses');
+  });
+
+  it('allows the page after a membership the server shows as active', async () => {
+    const state = thankYouNavigation({ kind: 'membership', planId: 'annual' }).state;
+    const allowed = runGuard({ state, memberships: of([{ planId: 'annual' }]) });
+    expect(await outcome(allowed.result)).toBe('allowed');
+    const refused = runGuard({ state, memberships: of([{ planId: 'other' }]) });
+    expect(await outcome(refused.result)).toBe('/dashboard');
   });
 });

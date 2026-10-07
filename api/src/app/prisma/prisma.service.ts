@@ -182,6 +182,7 @@ export class PrismaService
       { table: 'User', sql: 'ADD COLUMN `twitterUrl` VARCHAR(191) NULL' },
       { table: 'User', sql: 'ADD COLUMN `youtubeUrl` VARCHAR(191) NULL' },
       { table: 'User', sql: 'ADD COLUMN `emailAnnouncements` BOOLEAN NOT NULL DEFAULT true' },
+      { table: 'Enrollment', sql: 'ADD COLUMN `membershipPlanId` VARCHAR(191) NULL' },
     ];
 
     for (const addition of additions) {

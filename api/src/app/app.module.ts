@@ -6,6 +6,7 @@ import { AccountAwareThrottlerGuard } from './throttle';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { MembershipModule } from './membership/membership-access.service';
 import { AuthModule } from './auth/auth.module';
 import { CoursesModule } from './courses/courses.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -34,6 +35,7 @@ import { AccountModule } from './account/account.module';
       },
     ]),
     PrismaModule,
+    MembershipModule,
     MailModule,
     AuthModule,
     CoursesModule,
